@@ -73,7 +73,7 @@ export function mountEditor(root, { onChange = () => {}, onLogout = () => {} } =
         const meta = document.createElement('small'); meta.textContent = `${entry.created_at} UTC · ${entry.actor}`; row.append(title, meta);
         if (['delete','update','create','photo'].includes(entry.action) && !entry.undone_by) {
           const btn = document.createElement('button'); btn.className = 'btn tiny quiet'; btn.textContent = entry.action==='delete'?'Restore':'Undo';
-          btn.onclick = async () => { btn.disabled = true; try { await request(`${auditPath}/${entry.id}/${entry.action==='delete'?'restore':'undo'}`, { method: 'POST', data: {} }); await refresh(); onChange(); btn.textContent = 'Undone'; } catch (e) { btn.disabled = false; status(e.message, true); } };
+          btn.onclick = async () => { btn.disabled = true; try { await request(`${auditPath}/${entry.id}/${entry.action==='delete'?'restore':'undo'}`, { method: 'POST', data: {} }); await refresh(); onChange(); btn.textContent = 'Undone'; } catch (e) { btn.disabled = e.status === 409; btn.textContent = e.status === 409 ? 'Changed, cannot undo' : 'Retry undo'; btn.title = e.message; status(e.message, true); } };
           row.append(btn);
         }
         list.append(row);
