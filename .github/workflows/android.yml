@@ -1,7 +1,7 @@
 name: Android APK and backend checks
 on:
   push:
-    branches: [jinx/plu-hub-android-desktop-admin]
+    branches: [jinx/plu-hub-android-desktop-admin, jinx/plu-hub-dark-purple]
   workflow_dispatch:
 permissions:
   contents: read
