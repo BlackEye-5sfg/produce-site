@@ -30,7 +30,7 @@ if (page === 'login') {
   $('#desktop-admin').hidden = native || mobileBrowser; $('#android-download').hidden = native;
   $('#app-editor-button').hidden = !native;
   $('#native-nav').hidden = !native;
-  const viewHistory=createViewHistory();let editorRequest=0,openingEditor=false;
+  const viewHistory=createViewHistory();let editorRequest=0,openingEditor=false,loginRequest=0;
   const editorRoot = $('#native-editor'); let editor;
   function barcode(svg, item, large = false) {
     try { const spec=barcodeSpec(item);JsBarcode(svg, spec.value, { format: spec.format, width: large ? 2.2 : 1.35, height: large ? 85 : 42, fontSize: large ? 20 : 11, margin: 8, background: '#fff', lineColor: '#132922', displayValue: true }); }
@@ -113,8 +113,9 @@ if (page === 'login') {
     else editor.refresh();
   }
   $('#app-editor-button').onclick = openEditor; $('#nav-edit').onclick = openEditor;
-  $('#close-native-login').onclick = () => $('#native-login').close();
-  $('#native-login').addEventListener('cancel',e=>{if($('#native-login-form [type=submit]').disabled)e.preventDefault();});
+  $('#close-native-login').onclick = () => {loginRequest++;$('#native-login').close();};
+  $('#native-login').addEventListener('cancel',()=>{loginRequest++;});
+  $('#native-login').addEventListener('close',()=>{loginRequest++;$('#native-login-form').elements.password.value='';});
   if(native)window.pluHandleBack=createBackHandler({document,
     cancelPending:()=>{if(!openingEditor)return false;editorRequest++;openingEditor=false;return true;},
     closeUpdates:()=>{const panel=$('#app-update-panel');if(panel.hidden)return false;panel.hidden=true;panel.dataset.dismissed='true';window.scrollTo(0,Number(panel.dataset.backScroll)||0);return true;},
@@ -122,8 +123,8 @@ if (page === 'login') {
     resetFilters:()=>{if(!$('#search').value&&category==='all'&&![...document.querySelectorAll('[data-tag]')].some(s=>s.value))return false;$('#search').value='';category='all';for(const b of document.querySelectorAll('[data-cat]'))b.setAttribute('aria-pressed',String(b.dataset.cat==='all'));for(const s of document.querySelectorAll('[data-tag]'))s.value='';render();return true;}
   });
   $('#native-login-form').onsubmit = async e => {
-    e.preventDefault(); const f = e.target; const submit = f.querySelector('[type=submit]'); submit.disabled = true;
-    try { await login(f.elements.username.value.trim(), f.elements.password.value); f.elements.password.value = ''; $('#native-login').close(); await openEditor(); }
+    e.preventDefault(); const attempt=++loginRequest;const f = e.target; const submit = f.querySelector('[type=submit]'); submit.disabled = true;
+    try { await login(f.elements.username.value.trim(), f.elements.password.value); f.elements.password.value = ''; if(attempt!==loginRequest)return;$('#native-login').close(); await openEditor(); }
     catch (err) { showError($('#native-login-error'), err.message); } finally { submit.disabled = false; }
   };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); else { $('#keep-awake').checked=false;screenAwake(false).catch(()=>{});$('#awake-status').textContent=''; } });
