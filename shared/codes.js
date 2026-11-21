@@ -12,6 +12,7 @@ function expandUPCE(code){
 function validateCode(value,type){
  if(typeof value!=='string')return{error:'Enter codes as text to preserve leading zeros.'};
  if(!value.length||value.length>80||!/^\x20*[\x21-\x7e][\x20-\x7e]*$/.test(value)||value!==value.trim())return{error:'Use 1–80 printable characters, with no outer whitespace.'};
+ if(type!==undefined&&type!==null&&typeof type!=='string')return{error:'Choose a supported code format.'};
  type=type||'auto';if(type==='auto'){
   if(/^\d{1,3}$/.test(value))return{error:'PLUs need four or five digits. Choose Code128 explicitly for a shorter internal code.'};
   if(/^\d{4,5}$/.test(value))type='plu';else if(/^\d{12}$/.test(value))type='upca';else if(/^\d{13}$/.test(value))type='ean13';else if(/^\d{14}$/.test(value))type='gtin14';
