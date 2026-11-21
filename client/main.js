@@ -3,6 +3,7 @@ import { setupAppUpdates } from './app-updates';
 import '../public/js/search.js';
 import { native, mobileBrowser, request, me, login, mediaURL } from './api';
 import { mountEditor } from './editor';
+import {barcodeSpec,CODE_TYPES} from '../shared/codes';
 import { CATEGORIES, TAGS, tagLabels } from '../shared/catalog';
 import { similarItems, screenAwake } from './lookup-tools';
 const $ = s => document.querySelector(s);
@@ -29,9 +30,9 @@ if (page === 'login') {
   $('#app-editor-button').hidden = !native;
   $('#native-nav').hidden = !native;
   const editorRoot = $('#native-editor'); let editor;
-  function barcode(svg, plu, large = false) {
-    try { JsBarcode(svg, '000000' + String(plu).padStart(5, '0'), { format: 'upc', width: large ? 2.2 : 1.35, height: large ? 85 : 42, fontSize: large ? 20 : 11, margin: 8, background: '#fff', lineColor: '#132922', displayValue: true }); }
-    catch { svg.replaceWith(document.createTextNode(`PLU ${plu}`)); }
+  function barcode(svg, item, large = false) {
+    try { const spec=barcodeSpec(item);JsBarcode(svg, spec.value, { format: spec.format, width: large ? 2.2 : 1.35, height: large ? 85 : 42, fontSize: large ? 20 : 11, margin: 8, background: '#fff', lineColor: '#132922', displayValue: true }); }
+    catch { svg.replaceWith(document.createTextNode(`Code ${item.plu}`)); }
   }
   function freshness(failed = false) {
     offline=failed;const stamp=lastSync?new Date(lastSync).toLocaleString():null;
@@ -53,8 +54,8 @@ if (page === 'login') {
   $('#clear-recent').onclick=()=>{recent=[];safeStore('plu:recent:v1',recent);quick();};
   function openDetail(item){
     currentDetail=item;recent=[item.id,...recent.filter(x=>x!==item.id)].slice(0,12);safeStore('plu:recent:v1',recent);quick();
-    $('#detail-name').textContent=item.name;$('#detail-plu').textContent=item.plu;$('#detail-tags').textContent=tagLabels(item).join(' · ')||'Tags not set';
-    const target=$('#detail-barcode');target.replaceChildren();const big=document.createElementNS('http://www.w3.org/2000/svg','svg');target.append(big);barcode(big,item.plu,true);big.style.width=$('#barcode-size').value+'%';
+    $('#detail-name').textContent=item.name;$('#detail-plu').textContent=item.plu;$('#detail-plu').classList.toggle('code-long',item.plu.length>8);$('#detail-format').textContent=CODE_TYPES[item.code_type||'plu']||'Code';$('#detail-tags').textContent=tagLabels(item).join(' · ')||'Tags not set';
+    const target=$('#detail-barcode');target.replaceChildren();const big=document.createElementNS('http://www.w3.org/2000/svg','svg');target.append(big);barcode(big,item,true);big.style.width=$('#barcode-size').value+'%';
     const similar=similarItems(item,items);const list=$('#similar-items');list.replaceChildren();for(const other of similar){const b=document.createElement('button');b.className='quick-item';b.textContent=`${other.name} · ${other.plu}${tagLabels(other).length?' · '+tagLabels(other).join(', '):''}`;b.onclick=()=>openDetail(other);list.append(b);}$('#similar-section').hidden=!similar.length;
     if(!$('#detail-dialog').open)$('#detail-dialog').showModal();
   }
@@ -75,9 +76,9 @@ if (page === 'login') {
       favorite.onclick = () => { if (favorites.has(item.id)) favorites.delete(item.id); else favorites.add(item.id); safeStore('plu:favorites:v2', [...favorites]); render(); };
       top.append(chip, favorite);
       const name = document.createElement('h2'); name.textContent = item.name;
-      const plu = document.createElement('p'); plu.className = 'plu-number'; plu.textContent = item.plu;
+      const plu = document.createElement('p'); plu.className = 'plu-number'+(item.plu.length>8?' code-long':''); plu.textContent = item.plu;
       const open = document.createElement('button'); open.className = 'barcode-button'; open.setAttribute('aria-label', `Show larger barcode for ${item.name}`);
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); open.append(svg); barcode(svg, item.plu);
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); open.append(svg); barcode(svg, item);
       open.onclick = () => openDetail(item);
       const tags=document.createElement('p');tags.className='item-tags';tags.textContent=tagLabels(item).join(' · ');
       card.append(top);

@@ -106,13 +106,14 @@ function createApp(options = {}) {
   function routes(prefix, guards) {
     app.post(prefix, ...guards, (req, res, next) => {
       const item = parsed(req.body); if (item.error) return res.status(400).json(item);
-      if (store.getItemByPlu(item.plu)) return res.status(409).json({ error: 'That PLU already exists.' });
+      if (store.getItemByPlu(item.plu)) return res.status(409).json({ error: 'That code already exists.' });
       try { const created = store.createItem(item, req.actor); changed(); res.status(201).json(created); } catch (e) { next(e); }
     });
     app.patch(prefix+'/:id', ...guards, revision, (req, res, next) => {
       const id = Number(req.params.id); if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid item ID.' });
-      const item = parsed(req.body); if (item.error) return res.status(400).json(item);
-      const duplicate = store.getItemByPlu(item.plu); if (duplicate && duplicate.id !== id) return res.status(409).json({ error: 'That PLU already exists.' });
+      const known=store.getItemById(id);
+      const item = parsed({...req.body,code_type:req.body.code_type??(known?.plu===String(req.body.plu)?known.code_type:undefined)}); if (item.error) return res.status(400).json(item);
+      const duplicate = store.getItemByPlu(item.plu); if (duplicate && duplicate.id !== id) return res.status(409).json({ error: 'That code already exists.' });
       try { const r = store.updateItem(id, item, req.body.revision, req.actor); if (errorResult(r, res)) return; changed(); res.json(r.item); } catch (e) { next(e); }
     });
     app.delete(prefix+'/:id', ...guards, revision, (req, res, next) => {

@@ -75,6 +75,9 @@
   }
 
   function scoreItem(item, rawQuery) {
+    const raw=String(rawQuery||'').trim(),exactCode=String(item.plu||'');
+    if(raw&&exactCode===raw)return 1100;
+    if(raw&&exactCode.toLowerCase()===raw.toLowerCase())return 1050;
     const qTokens = tokens(rawQuery);
     if (!qTokens.length) return 1;
 
@@ -99,11 +102,11 @@
     if (nameJoined === qJoined) return 940;
     if (nameJoined.startsWith(qJoined)) return 800;
 
-    const pool = [...nameTokens.flatMap(expand), ...tokens((item.aliases || []).join(" ")), ...tokens(item.es), item.cat, plu].filter(Boolean);
+    const pool = [...nameTokens.flatMap(expand), ...tokens((item.aliases || []).join(" ")), ...tokens(item.es), item.cat].filter(Boolean);
     const leftover = [...pool];
     for (const qt of qTokens) {
       const idx = leftover.findIndex((nt) => wordMatch(nt, qt) || nt.includes(qt));
-      if (idx === -1) return 0;
+      if (idx === -1) {if(tokens(plu).some(t=>t.includes(qt)))continue;return 0;}
       leftover.splice(idx, 1);
     }
 

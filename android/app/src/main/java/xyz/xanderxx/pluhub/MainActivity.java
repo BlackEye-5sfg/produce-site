@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ScreenAwakePlugin.class);
         registerPlugin(AppUpdaterPlugin.class);
+        registerPlugin(BarcodeScannerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
