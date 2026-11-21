@@ -4,3 +4,12 @@ data/*.db
 data/*.db-*
 *.log
 .DS_Store
+
+# Build output and private signing material
+public/js/bundle.js
+*.jks
+*.keystore
+*.p12
+*.pem
+playwright-report/
+test-results/
