@@ -62,6 +62,7 @@
 
   function wordMatch(candidate, queryToken) {
     if (!candidate || !queryToken) return false;
+    if (/^\d+$/.test(queryToken)) return /^\d+$/.test(candidate) && candidate.includes(queryToken);
     if (candidate === queryToken) return true;
     if (candidate.length >= 4 && queryToken.length >= 4 && Math.abs(candidate.length-queryToken.length)<=1) {
       // Bounded edit-distance1, including common adjacent transposition typos.
