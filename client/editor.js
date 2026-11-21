@@ -2,7 +2,7 @@ import { request, adminPath, auditPath, logout, native } from './api';
 export function mountEditor(root, { onChange = () => {}, onLogout = () => {} } = {}) {
   let items = [], editing = null;
   root.innerHTML = `<div class="editor-top"><div><p class="eyebrow">YOUR CATALOG</p><h1>Make a little change.</h1><p class="muted">One catalog. Changes show on the website and app.</p></div><button class="btn quiet" id="signout">Sign out</button></div>
-  <div class="editor-tools"><label class="search compact"><span>⌕</span><input id="admin-search" type="search" placeholder="Find a name or PLU…" aria-label="Search catalog"></label><button class="btn" id="new-item">＋ Add item</button><button class="btn quiet" id="history">Activity</button></div>
+  <div class="editor-tools"><label class="search compact"><span>⌕</span><input id="admin-search" type="search" placeholder="Find a name or PLU…" aria-label="Search catalog"></label><button class="btn" id="new-item">＋ Add item</button><button class="btn quiet" id="history">Activity</button><button class="btn quiet" id="refresh-admin">Refresh</button></div>
   <p id="editor-status" role="status" class="message"></p><div class="table-wrap"><table><thead><tr><th>Produce</th><th>PLU</th><th>Category</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="admin-rows"></tbody></table></div>
   <dialog id="item-dialog"><form id="item-form"><div class="dialog-head"><h2 id="form-title">Add produce</h2><button type="button" class="icon-btn" id="close-item" aria-label="Close">×</button></div>
   <label>Name<input name="name" required maxlength="120" autocomplete="off" placeholder="e.g. Bananas, Yellow"></label><div class="form-pair"><label>PLU<input name="plu" required inputmode="numeric" pattern="[0-9]{4,5}" maxlength="5" autocomplete="off" placeholder="4011"></label><label>Category<select name="cat"><option value="fruit">Fruit</option><option value="veg">Vegetables</option><option value="dry">Pantry</option></select></label></div>
@@ -38,7 +38,7 @@ export function mountEditor(root, { onChange = () => {}, onLogout = () => {} } =
     $('#item-dialog').showModal();
   }
   $('#new-item').onclick = () => open(); $('#close-item').onclick = () => $('#item-dialog').close();
-  $('#close-history').onclick = () => $('#history-dialog').close(); $('#admin-search').oninput = render;
+  $('#close-history').onclick = () => $('#history-dialog').close(); $('#admin-search').oninput = render; $('#refresh-admin').onclick = () => refresh().then(() => status('Catalog refreshed.')).catch(e => status(e.message, true));
   $('#signout').onclick = async () => { await logout().catch(() => {}); if (native) onLogout(); else location.href = '/'; };
   $('#item-form').onsubmit = async e => {
     e.preventDefault(); const f = new FormData(e.target); const data = { name: f.get('name'), plu: f.get('plu'), cat: f.get('cat') };

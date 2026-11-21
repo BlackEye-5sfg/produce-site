@@ -12,7 +12,7 @@ function createApp(options = {}) {
   const password = options.password ?? process.env.AUTH_PASSWORD;
   if (!password) throw new Error('AUTH_PASSWORD must be configured');
   const secret = options.sessionSecret || process.env.SESSION_SECRET || crypto.randomBytes(48).toString('hex');
-  const production = options.production ?? process.env.NODE_ENV === 'production';
+  const secureCookie = options.production === undefined ? 'auto' : options.production;
   const app = express(); const clients = new Set(); const attempts = new Map();
   app.disable('x-powered-by'); app.set('trust proxy', 1); app.set('query parser', 'simple');
   app.use(express.json({ limit: '64kb' })); app.use(express.urlencoded({ extended: false, limit: '64kb' }));
@@ -20,7 +20,7 @@ function createApp(options = {}) {
     res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' }); next();
   });
   app.use(session({ name: 'pluhub.sid', secret, resave: false, rolling: true, saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax', secure: production, maxAge: 3 * 24 * 60 * 60 * 1000 } }));
+    cookie: { httpOnly: true, sameSite: 'lax', secure: secureCookie, maxAge: 3 * 24 * 60 * 60 * 1000 } }));
   const hash = token => crypto.createHash('sha256').update(token).digest('hex');
   const equal = (a, b) => {
     const x = crypto.createHash('sha256').update(String(a || '')).digest();
@@ -134,8 +134,14 @@ function createApp(options = {}) {
   auditRoutes('/api/audit', [desktop, webAuth, sameOrigin, csrf]);
   auditRoutes('/api/app/audit', [appAuth]);
   const publicDir = path.join(__dirname, '..', 'public');
-  for (const p of ['/edit','/edit.html']) app.get(p, desktop, webAuth, (_req, res) => res.sendFile(path.join(publicDir,'edit.html')));
-  app.get('/login.html', desktop, (_req, res) => res.sendFile(path.join(publicDir,'login.html')));
+  app.use((req, res, next) => {
+    let route; try { route = decodeURIComponent(req.path).toLowerCase().replace(/\/+$/, ''); } catch { return res.sendStatus(400); }
+    if (!['/edit','/edit.html','/login.html'].includes(route)) return next();
+    desktop(req, res, () => {
+      if (route === '/login.html') return res.sendFile(path.join(publicDir, 'login.html'));
+      webAuth(req, res, () => res.sendFile(path.join(publicDir, 'edit.html')));
+    });
+  });
   app.use(express.static(publicDir, { etag: true, maxAge: 0 }));
   app.use((err, _req, res, _next) => { console.error('PLU request failed:', err.code || err.name); const status = [400,413].includes(err.status) ? err.status : 500; res.status(status).json({ error: status === 500 ? 'Could not complete this request.' : 'Invalid or oversized request body.' }); });
   app.locals.store = store; app.locals.closeStreams = () => { for (const c of clients) c.end(); clients.clear(); };

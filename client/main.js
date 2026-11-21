@@ -21,7 +21,7 @@ if (page === 'login') {
   let favorites;
   try { favorites = new Set(JSON.parse(localStorage.getItem('plu:favorites:v2') || '[]')); } catch { favorites = new Set(); }
   const safeStore = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-  $('#desktop-admin').hidden = native || mobileBrowser;
+  $('#desktop-admin').hidden = native || mobileBrowser; $('#android-download').hidden = native;
   $('#app-editor-button').hidden = !native;
   $('#native-nav').hidden = !native;
   const editorRoot = $('#native-editor'); let editor;

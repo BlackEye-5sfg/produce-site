@@ -13,3 +13,5 @@ public/js/bundle.js
 *.pem
 playwright-report/
 test-results/
+
+public/downloads/*.apk

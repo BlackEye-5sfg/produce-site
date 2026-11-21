@@ -10,7 +10,7 @@ const DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0';
 const PHONE = 'Mozilla/5.0 (Linux; Android 15) Mobile';
 async function fixture(t) {
   const store = createStore(':memory:');
-  store.seedItems([{ name: 'Bananas, Yellow', plu: '4011', cat: 'fruit' }]);
+  store.seedItems([{ name: 'Bananas, Yellow', plu: '4011', cat: 'fruit', es: 'Plátano' }]);
   const app = createApp({ store, user: 'fixture-user', password: 'fixture-password', sessionSecret: 'fixture-only-not-a-deployed-secret', production: false });
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -34,7 +34,7 @@ async function fixture(t) {
 test('mobile public reader works; mobile admin/login pages and web writes are blocked', async t => {
   const f = await fixture(t);
   for (const url of ['/', '/api/items', '/api/health']) assert.equal((await f.call(url,'GET',undefined,{'User-Agent':PHONE})).status,200);
-  for (const url of ['/edit','/edit.html','/login.html']) assert.equal((await f.call(url,'GET',undefined,{'User-Agent':PHONE})).status,403);
+  for (const url of ['/edit','/edit.html','/login.html','/%65dit.html','/LOGIN.HTML']) assert.equal((await f.call(url,'GET',undefined,{'User-Agent':PHONE})).status,403);
   assert.equal((await f.call('/api/login','POST',{username:'fixture-user',password:'fixture-password'},{'User-Agent':PHONE})).status,403);
   assert.equal((await f.call('/api/items','POST',{name:'Test',plu:'9999',cat:'fruit'},{'User-Agent':PHONE})).status,403);
 });
@@ -81,7 +81,7 @@ test('delete is audited and recoverable; duplicate restore fails safely', async 
   const f=await fixture(t);await f.signIn();const item=f.store.listItems()[0];
   assert.equal((await f.call('/api/items/'+item.id,'DELETE',{revision:item.revision})).status,200); assert.equal(f.store.countItems(),0);
   const entries=await (await f.call('/api/audit')).json();const del=entries.find(x=>x.action==='delete');assert.ok(del);
-  assert.equal((await f.call('/api/audit/'+del.id+'/restore','POST',{})).status,200);assert.equal(f.store.getItemById(item.id).plu,'4011');
+  assert.equal((await f.call('/api/audit/'+del.id+'/restore','POST',{})).status,200);assert.equal(f.store.getItemById(item.id).plu,'4011');assert.equal(f.store.getItemById(item.id).es,'Plátano');
   assert.equal((await f.call('/api/audit/'+del.id+'/restore','POST',{})).status,409);
 });
 test('catalog ETag/revision changes after mutation and SSE emits catalog events', async t => {

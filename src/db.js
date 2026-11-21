@@ -25,7 +25,7 @@ function createStore(filename = process.env.PLU_DB_PATH || path.join(__dirname, 
     CREATE TABLE IF NOT EXISTS app_sessions (token_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
   `);
   const fields = "id,name,plu,cat,revision,COALESCE(NULLIF(updated_at,''),created_at) AS updated_at";
-  const getItemById = id => db.prepare(`SELECT ${fields} FROM items WHERE id=?`).get(id);
+  const getItemById = id => db.prepare(`SELECT *, COALESCE(NULLIF(updated_at,''),created_at) AS updated_at FROM items WHERE id=?`).get(id);
   const getItemByPlu = plu => db.prepare(`SELECT ${fields} FROM items WHERE plu=?`).get(plu);
   function audit(action, id, actor, before, after) {
     db.prepare('INSERT INTO item_audit(action,item_id,actor,before_json,after_json) VALUES(?,?,?,?,?)')
@@ -56,8 +56,8 @@ function createStore(filename = process.env.PLU_DB_PATH || path.join(__dirname, 
     if (!row) return { error: 'not_found' };
     const before = JSON.parse(row.before_json);
     if (getItemById(before.id) || getItemByPlu(before.plu)) return { error: 'conflict' };
-    db.prepare("INSERT INTO items(id,name,es,plu,cat,revision,updated_at) VALUES(?,?,'',?,?,?,datetime('now'))")
-      .run(before.id, before.name, before.plu, before.cat, before.revision + 1);
+    db.prepare("INSERT INTO items(id,name,es,plu,cat,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,datetime('now'))")
+      .run(before.id, before.name, before.es || '', before.plu, before.cat, before.revision + 1, before.created_at || new Date().toISOString());
     const after = getItemById(before.id); audit('restore', after.id, actor, null, after); return { item: after };
   });
   const seedItems = db.transaction(rows => {
