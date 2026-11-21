@@ -23,4 +23,9 @@ public class ScreenAwakePlugin extends Plugin {
             call.resolve(new JSObject());
         });
     }
+    @Override
+    protected void handleOnPause() {
+        getActivity().runOnUiThread(() ->
+            getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
+    }
 }

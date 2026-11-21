@@ -1,11 +1,14 @@
 import {registerPlugin} from '@capacitor/core';
 import {native} from './api';
-const ScreenAwake=registerPlugin('ScreenAwake');let wake=null;
-export async function screenAwake(enabled){
- if(native){await(enabled?ScreenAwake.keepAwake():ScreenAwake.allowSleep());return enabled;}
- if(!enabled){if(wake)await wake.release();wake=null;return false;}
- if(!navigator.wakeLock)throw Error('Screen-awake is not supported in this browser.');
- wake=await navigator.wakeLock.request('screen');return true;
+const ScreenAwake=registerPlugin('ScreenAwake');let wake=null,wanted=false,queue=Promise.resolve();
+export function screenAwake(enabled){
+ wanted=enabled;
+ queue=queue.catch(()=>{}).then(async()=>{
+  if(native){await(wanted?ScreenAwake.keepAwake():ScreenAwake.allowSleep());if(!wanted)await ScreenAwake.allowSleep();return wanted;}
+  if(!wanted){if(wake)await wake.release();wake=null;return false;}
+  if(!navigator.wakeLock)throw Error('Screen-awake is not supported in this browser.');
+  const lock=await navigator.wakeLock.request('screen');if(!wanted){await lock.release();return false;}wake=lock;return true;
+ });return queue;
 }
 export function similarItems(item,items){
  const stop=new Set(['organic','conventional','small','large','medium','red','green','yellow','fresh','loose','bunched','seedless','mini','normal']);

@@ -1,6 +1,6 @@
 const path=require('node:path'),fs=require('node:fs'),Database=require('better-sqlite3');
 const {validateItem}=require('../shared/catalog');
-const schema=name=>`CREATE TABLE ${name} (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,es TEXT NOT NULL DEFAULT '',plu TEXT NOT NULL UNIQUE,cat TEXT NOT NULL CHECK(cat IN ('fruit','veg','herbs','dry')),created_at TEXT NOT NULL DEFAULT(datetime('now')),revision INTEGER NOT NULL DEFAULT1,updated_at TEXT NOT NULL DEFAULT '',organic TEXT NOT NULL DEFAULT '',storage TEXT NOT NULL DEFAULT '',locations TEXT NOT NULL DEFAULT '[]',sale_unit TEXT NOT NULL DEFAULT '',aliases TEXT NOT NULL DEFAULT '[]',photo TEXT NOT NULL DEFAULT '')`.replace('DEFAULT1','DEFAULT 1');
+const schema=name=>`CREATE TABLE ${name} (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,es TEXT NOT NULL DEFAULT '',plu TEXT NOT NULL UNIQUE,cat TEXT NOT NULL CHECK(cat IN ('fruit','veg','herbs','dry')),created_at TEXT NOT NULL DEFAULT(datetime('now')),revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL DEFAULT '',organic TEXT NOT NULL DEFAULT '',storage TEXT NOT NULL DEFAULT '',locations TEXT NOT NULL DEFAULT '[]',sale_unit TEXT NOT NULL DEFAULT '',aliases TEXT NOT NULL DEFAULT '[]',photo TEXT NOT NULL DEFAULT '')`;
 const extra={organic:'',storage:'',locations:[],sale_unit:'',aliases:[],photo:''};
 const business=['name','es','plu','cat','organic','storage','locations','sale_unit','aliases','photo'];
 const decode=row=>row?{...row,locations:JSON.parse(row.locations||'[]'),aliases:JSON.parse(row.aliases||'[]')}:undefined;
@@ -71,6 +71,6 @@ function createStore(filename=process.env.PLU_DB_PATH||path.join(__dirname,'..',
  return {db,createItem,updateItem,deleteItem,undoItem,restoreItem:(id,actor)=>undoItem(id,actor,true),seedItems,getItemById,getItemByPlu,previewBulk,applyBulk,
   listItems:()=>db.prepare("SELECT id,name,plu,cat,revision,COALESCE(NULLIF(updated_at,''),created_at) AS updated_at,organic,storage,locations,sale_unit,aliases,photo FROM items ORDER BY name COLLATE NOCASE").all().map(decode),
   countItems:()=>db.prepare('SELECT count(*) n FROM items').get().n,revision:()=>db.prepare('SELECT revision FROM catalog_meta WHERE id=1').get().revision,
-  listAudit:()=>db.prepare('SELECT * FROM item_audit ORDER BY id DESC LIMIT40'.replace('LIMIT40','LIMIT 40')).all(),close:()=>db.close()};
+  listAudit:()=>db.prepare('SELECT * FROM item_audit ORDER BY id DESC LIMIT 40').all(),close:()=>db.close()};
 }
 let defaultStore;module.exports={createStore};for(const k of ['db','seedItems','getItemById','getItemByPlu','createItem','deleteItem','countItems','listItems'])Object.defineProperty(module.exports,k,{get(){defaultStore||=createStore();return defaultStore[k];}});
