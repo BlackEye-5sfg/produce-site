@@ -4,6 +4,9 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const express = require('express');
 const session = require('express-session');
 const { createStore } = require('./db');
+const { validateItem } = require('../shared/catalog');
+const { savePhoto } = require('./photos');
+const fs = require('node:fs');
 
 const MOBILE = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Windows Phone|Opera Mini|webOS|Silk|Kindle/i;
 function createApp(options = {}) {
@@ -15,7 +18,7 @@ function createApp(options = {}) {
   const secureCookie = options.production === undefined ? 'auto' : options.production;
   const app = express(); const clients = new Set(); const attempts = new Map();
   app.disable('x-powered-by'); app.set('trust proxy', 1); app.set('query parser', 'simple');
-  app.use(express.json({ limit: '64kb' })); app.use(express.urlencoded({ extended: false, limit: '64kb' }));
+  app.use(express.json({ limit: '1mb' })); app.use(express.urlencoded({ extended: false, limit: '64kb' }));
   app.use((_req, res, next) => {
     res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' }); next();
   });
@@ -90,13 +93,7 @@ function createApp(options = {}) {
     req.on('close', () => { clearInterval(timer); clients.delete(res); });
   });
   function changed() { for (const client of clients) client.write(`event: catalog\ndata: ${store.revision()}\n\n`); }
-  function parsed(body) {
-    const name = String(body.name || '').trim(); const plu = String(body.plu || '').trim(); const cat = String(body.cat || '').toLowerCase();
-    if (!name || name.length > 120) return { error: 'Enter a name of 1 to 120 characters.' };
-    if (!/^\d{4,5}$/.test(plu)) return { error: 'PLU must contain 4 or 5 digits.' };
-    if (!['fruit','veg','dry'].includes(cat)) return { error: 'Choose Fruit, Vegetables or Pantry.' };
-    return { name, plu, cat };
-  }
+  const parsed = validateItem;
   function revision(req, res, next) {
     if (req.body.revision !== undefined && (!Number.isInteger(req.body.revision) || req.body.revision < 1)) return res.status(400).json({ error: 'Invalid item revision.' });
     next();
@@ -123,10 +120,41 @@ function createApp(options = {}) {
       try { const r = store.deleteItem(id, req.body.revision, req.actor); if (errorResult(r, res)) return; changed(); res.json({ ok: true, id }); } catch (e) { next(e); }
     });
   }
+  const previews = new Map();
+  const photoDir = options.photoDir || process.env.PLU_PHOTO_DIR || path.join(__dirname,'..','data','photos');
+  function tools(prefix,guards) {
+    const owner=req=>req.actor+':'+(req.tokenHash||req.sessionID);
+    app.post(prefix+'/bulk/preview',...guards,(req,res)=>{
+      for(const [id,p] of previews)if(p.expires<Date.now())previews.delete(id);
+      if(previews.size>=20)return res.status(429).json({error:'Too many pending previews. Wait ten minutes.'});
+      const plan=store.previewBulk(req.body.rows);if(plan.errors.length)return res.status(400).json({error:'Fix the import rows before confirming.',errors:plan.errors});
+      const id=crypto.randomUUID();previews.set(id,{...plan,owner:owner(req),expires:Date.now()+600000,revision:store.revision()});
+      res.set('Cache-Control','no-store').json({previewId:id,rows:plan.rows,expiresAt:Date.now()+600000});
+    });
+    app.post(prefix+'/bulk/confirm',...guards,(req,res,next)=>{
+      const id=req.body.previewId,p=previews.get(id);
+      if(!p||p.owner!==owner(req)||p.expires<Date.now())return res.status(410).json({error:'Preview expired or unavailable. Preview again.'});
+      previews.delete(id);
+      try{const r=store.applyBulk(p.rows,p.revision,req.actor);if(errorResult(r,res))return;changed();res.json(r);}catch(e){next(e);}
+    });
+    app.post(prefix+'/:id/photo',...guards,revision,(req,res,next)=>{
+      const item=store.getItemById(Number(req.params.id));if(!item)return res.status(404).json({error:'Item not found.'});
+      if(req.body.revision!==item.revision)return res.status(409).json({error:'This item changed. Refresh before uploading.'});
+      let photo='';try{if(req.body.remove!==true)photo=savePhoto(photoDir,req.body.dataUrl);}catch(e){return res.status(400).json({error:e.message});}
+      try{const r=store.updateItem(item.id,{photo},item.revision,req.actor,'photo');if(errorResult(r,res))return;changed();res.json(r.item);}catch(e){next(e);}
+    });
+  }
+  tools('/api/items',[desktop,webAuth,sameOrigin,csrf]);tools('/api/app/items',[appAuth]);
+  app.get('/photos/:name',(req,res)=>{
+    if(!/^[a-f0-9]{64}\.(jpg|png)$/.test(req.params.name))return res.sendStatus(404);
+    const file=path.join(photoDir,req.params.name);try{if(!fs.lstatSync(file).isFile())return res.sendStatus(404);}catch{return res.sendStatus(404);}
+    res.set({'Cache-Control':'public,max-age=31536000,immutable','Content-Security-Policy':"default-src 'none'"});res.sendFile(file);
+  });
   routes('/api/items', [desktop, webAuth, sameOrigin, csrf]);
   routes('/api/app/items', [appAuth]);
   function auditRoutes(prefix, guards) {
     app.get(prefix, ...guards, (_req, res) => res.set('Cache-Control','no-store').json(store.listAudit()));
+    app.post(prefix+'/:id/undo', ...guards, (req,res,next) => { try { const r=store.undoItem(Number(req.params.id),req.actor); if(errorResult(r,res))return; changed();res.json(r); } catch(e){next(e);} });
     app.post(prefix+'/:id/restore', ...guards, (req, res, next) => {
       try { const r = store.restoreItem(Number(req.params.id), req.actor); if (errorResult(r, res)) return; changed(); res.json(r.item); } catch (e) { next(e); }
     });
