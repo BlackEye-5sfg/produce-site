@@ -12,11 +12,11 @@ export function setupAppUpdates(){
   $('#download-app-update').hidden=!state.available||state.ready;
   $('#install-app-update').hidden=!state.available||!state.ready||!state.canInstall;
   $('#allow-app-updates').hidden=!state.available||!state.ready||state.canInstall;
-  if(state.available){panel.hidden=false;status(state.ready?`Update ${state.versionName} is downloaded and verified. ${state.canInstall?'Tap Install; Android will ask for confirmation.':'Allow app updates in Android settings, then tap Install.'}`:`Update ${state.versionName} is available (${(state.size/1048576).toFixed(1)}MB). ${state.unmetered?'Ready to download.':'Automatic downloads wait for an unmetered connection.'}`);}
+  if(state.available){if(panel.dataset.dismissed!=='true')panel.hidden=false;status(state.ready?`Update ${state.versionName} is downloaded and verified. ${state.canInstall?'Tap Install; Android will ask for confirmation.':'Allow app updates in Android settings, then tap Install.'}`:`Update ${state.versionName} is available (${(state.size/1048576).toFixed(1)}MB). ${state.unmetered?'Ready to download.':'Automatic downloads wait for an unmetered connection.'}`);}
   else status(`Installed version ${state.installedVersion}. ${state.checked?'No newer release is published.':'Check for newer releases when connected.'}`);
  }
  async function download(auto=false){
-  if(busy)return;busy=true;panel.hidden=false;$('#download-app-update').disabled=true;status('Downloading update. The APK will be checked before installation…');
+  if(busy)return;busy=true;if(!auto||panel.dataset.dismissed!=='true')panel.hidden=false;$('#download-app-update').disabled=true;status('Downloading update. The APK will be checked before installation…');
   try{state=await Updater.download({unmeteredOnly:auto});render();}catch(e){status(e.message||'Download failed; nothing was installed.');}finally{busy=false;$('#download-app-update').disabled=false;}
  }
  async function check(force=false){
@@ -30,7 +30,7 @@ export function setupAppUpdates(){
  $('#check-app-update').onclick=()=>check(true);$('#download-app-update').onclick=()=>download(false);
  $('#allow-app-updates').onclick=async()=>{try{await Updater.settings();status('Return from Android settings, then tap Check now / Install. Android controls this permission.');}catch(e){status(e.message);}};
  $('#install-app-update').onclick=async()=>{try{await Updater.install();status('Android installer opened. Approve the update there; if cancelled, you can tap Install again.');}catch(e){status(e.message);}};
- $('#nav-updates').onclick=()=>{panel.hidden=false;panel.scrollIntoView({behavior:'smooth',block:'start'});check(true);};
+ $('#nav-updates').onclick=()=>{panel.dataset.backScroll=String(window.scrollY);delete panel.dataset.dismissed;panel.hidden=false;panel.scrollIntoView({behavior:'smooth',block:'start'});check(true);};
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)check();});window.addEventListener('online',()=>check());
  setInterval(()=>{if(!document.hidden)check();},4*3600000);check();
 }
