@@ -22,6 +22,7 @@ function createFloorList(){
 }
 function mountFloorList(document){
  const $=s=>document.querySelector(s),dialog=$('#floor-list-dialog'),root=$('#floor-list-rows'),list=createFloorList();
+ if(!dialog||!root)return; // Older cached website HTML must still load its reader safely.
  function status(){const rows=list.rows.filter(x=>x.text.trim()),done=rows.filter(x=>x.checked).length;$('#floor-list-count').textContent=`${rows.length-done} needed · ${done} checked`;}
  function focus(id,caret){const input=root.querySelector(`[data-row="${id}"] textarea`);if(!input)return;input.focus();input.setSelectionRange(caret??input.value.length,caret??input.value.length);input.scrollIntoView({block:'nearest'});}
  function height(input){input.style.height='auto';input.style.height=Math.max(44,input.scrollHeight)+'px';}
