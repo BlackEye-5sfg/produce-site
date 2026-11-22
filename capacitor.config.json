@@ -2,6 +2,11 @@
   "appId": "xyz.xanderxx.pluhub",
   "appName": "PLU Hub",
   "webDir": "public",
-  "android": { "allowMixedContent": false },
-  "server": { "androidScheme": "https" }
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "backgroundColor": "#100d17"
 }
