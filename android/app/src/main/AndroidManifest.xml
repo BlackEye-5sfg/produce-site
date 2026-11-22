@@ -40,6 +40,10 @@
         </provider>
     </application>
 
+    <!-- Optional, runtime-requested only when the user opens Scan. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

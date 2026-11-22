@@ -13,6 +13,16 @@ A small produce reference website and Android companion sharing one Express API 
 
 **The mobile-browser gate is deliberately best-effort.** User-Agent checks can be spoofed. Password/session or app-token authorization remains mandatory on all writes; an app install or a forged app header grants no privilege.
 
+## Barcode scanning and longer codes (2.3)
+
+The name stays **PLU Hub**. Android's Add item form has Scan barcode, plus a Scan to add shortcut. Camera permission is requested only on that action. The bundled ZXing decoder works on-device without downloading a model, saving barcode images, uploading frames or using an account/API key. Cancel/denial/no camera retains manual entry. The scan fills only the code and its format; name/category/tags require review and explicit Save. Exact duplicates are refused by the shared API. Desktop administration accepts manual/pasted/keyboard-scanner input; native camera scanning is Android-only.
+
+Formats: existing4/5-digit PLU, UPC-A12, UPC-E8, EAN-13 (13 digits), EAN-8 (8 digits), GTIN-14, even-length ITF and plain printable Code128/uppercase Code39 (up to80 characters). Choose an explicit type for ambiguous eight-digit codes; Auto selects PLUs for4/5 digits and common retail lengths, otherwise Code128. UPC/EAN/GTIN checksums are validated, never repaired. Unknown/QR/2D/GS1-FNC1 structured payloads are not accepted by the camera scanner. No product identity lookup or PLU inference from a zero-prefixed retail scan.
+
+The existing API/storage property `plu` remains for backwards compatibility, always text. New `code_type` controls validation/rendering and is included in CSV/JSON bulk previews, audit/undo and public reads. Existing records gain `code_type=plu` via an additive migration without recategorizing/changing values. Legacy metadata edits retain a stored type. Longer numeric codes must be JSON strings, not numbers, to protect leading zeros. Mixed-case internal values are preserved and searched literally without fuzzy code matching.
+
+Retail/internal barcodes render the full validated value in their own symbology, never as a padded UPC. Existing PLU reference graphics keep their previous encoding; that legacy representation is not a claim of checkout compatibility. Dense long barcodes may need a larger display. Physical camera/permission/orientation and POS-scanner compatibility still require device testing. Scanner library attribution/Apache2 licenses are bundled at `public/licenses/zxing.txt`.
+
 ## Android app updates (2.2)
 
 One manual installation of the signed2.2.0 APK is needed to add the updater to older versions. After that the app checks the first-party HTTPS release feed on launch, when returning to the foreground/online (four-hour successful-check cooldown), and periodically while visible. Updates has a manual Check now button.

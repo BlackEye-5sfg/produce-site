@@ -1,8 +1,8 @@
 const path=require('node:path'),fs=require('node:fs'),Database=require('better-sqlite3');
 const {validateItem}=require('../shared/catalog');
-const schema=name=>`CREATE TABLE ${name} (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,es TEXT NOT NULL DEFAULT '',plu TEXT NOT NULL UNIQUE,cat TEXT NOT NULL CHECK(cat IN ('fruit','veg','herbs','dry')),created_at TEXT NOT NULL DEFAULT(datetime('now')),revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL DEFAULT '',organic TEXT NOT NULL DEFAULT '',storage TEXT NOT NULL DEFAULT '',locations TEXT NOT NULL DEFAULT '[]',sale_unit TEXT NOT NULL DEFAULT '',aliases TEXT NOT NULL DEFAULT '[]',photo TEXT NOT NULL DEFAULT '')`;
-const extra={organic:'',storage:'',locations:[],sale_unit:'',aliases:[],photo:''};
-const business=['name','es','plu','cat','organic','storage','locations','sale_unit','aliases','photo'];
+const schema=name=>`CREATE TABLE ${name} (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,es TEXT NOT NULL DEFAULT '',plu TEXT NOT NULL UNIQUE,cat TEXT NOT NULL CHECK(cat IN ('fruit','veg','herbs','dry')),created_at TEXT NOT NULL DEFAULT(datetime('now')),revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL DEFAULT '',organic TEXT NOT NULL DEFAULT '',storage TEXT NOT NULL DEFAULT '',locations TEXT NOT NULL DEFAULT '[]',sale_unit TEXT NOT NULL DEFAULT '',aliases TEXT NOT NULL DEFAULT '[]',photo TEXT NOT NULL DEFAULT '',code_type TEXT NOT NULL DEFAULT 'plu')`;
+const extra={organic:'',storage:'',locations:[],sale_unit:'',aliases:[],photo:'',code_type:'plu'};
+const business=['name','es','plu','cat','organic','storage','locations','sale_unit','aliases','photo','code_type'];
 const decode=row=>row?{...row,locations:JSON.parse(row.locations||'[]'),aliases:JSON.parse(row.aliases||'[]')}:undefined;
 function createStore(filename=process.env.PLU_DB_PATH||path.join(__dirname,'..','data','plu.db')){
  if(filename!==':memory:')fs.mkdirSync(path.dirname(filename),{recursive:true});const db=new Database(filename);db.pragma('journal_mode=WAL');db.pragma('foreign_keys=ON');db.pragma('busy_timeout=5000');let migrated=false;
@@ -12,10 +12,11 @@ function createStore(filename=process.env.PLU_DB_PATH||path.join(__dirname,'..',
   else {
    const columns=db.prepare('PRAGMA table_info(items)').all().map(x=>x.name),target=['id','name','es','plu','cat','created_at','revision','updated_at',...Object.keys(extra)];
    if(columns.some(x=>!target.includes(x)))throw Error('Unknown item columns; migration requires review');
+   if(old.sql.includes("'herbs'")&&!columns.includes('code_type')){db.exec("ALTER TABLE items ADD COLUMN code_type TEXT NOT NULL DEFAULT 'plu'");columns.push('code_type');migrated=true;}
    if(!old.sql.includes("'herbs'")||target.some(x=>!columns.includes(x))){
     for(const t of db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all())if(db.prepare(`PRAGMA foreign_key_list("${t.name.replace(/"/g,'""')}")`).all().some(x=>x.table==='items'))throw Error('External item references require migration review');
     const seq=db.prepare("SELECT seq FROM sqlite_sequence WHERE name='items'").get()?.seq||0;
-    db.exec(schema('items_next'));const defaults={revision:'1',updated_at:"''",organic:"''",storage:"''",locations:"'[]'",sale_unit:"''",aliases:"'[]'",photo:"''"};
+    db.exec(schema('items_next'));const defaults={revision:'1',updated_at:"''",organic:"''",storage:"''",locations:"'[]'",sale_unit:"''",aliases:"'[]'",photo:"''",code_type:"'plu'"};
     db.exec(`INSERT INTO items_next(${target.join(',')}) SELECT ${target.map(x=>columns.includes(x)?x:defaults[x]).join(',')} FROM items;DROP TABLE items;ALTER TABLE items_next RENAME TO items;`);
     const now=db.prepare("SELECT seq FROM sqlite_sequence WHERE name='items'").get();if(now)db.prepare("UPDATE sqlite_sequence SET seq=? WHERE name='items'").run(Math.max(seq,now.seq));else db.prepare('INSERT INTO sqlite_sequence(name,seq) VALUES(?,?)').run('items',seq);migrated=true;
    }
@@ -53,7 +54,7 @@ function createStore(filename=process.env.PLU_DB_PATH||path.join(__dirname,'..',
  function previewBulk(rows){
   if(!Array.isArray(rows)||!rows.length||rows.length>100)return{errors:[{row:0,error:'Use1–100 rows.'}],rows:[]};
   const result=[],errors=[],seen=new Set(),ids=new Set();
-  rows.forEach((raw,index)=>{const fail=error=>errors.push({row:index+1,error});const item=validateItem(raw);if(item.error)return fail(item.error);
+  rows.forEach((raw,index)=>{const fail=error=>errors.push({row:index+1,error});const known=raw&&typeof raw==='object'?(raw.id===undefined?getItemByPlu(String(raw.plu??'')):Number.isSafeInteger(raw.id)?getItemById(raw.id):null):null;const item=validateItem(raw&&typeof raw==='object'?{...raw,code_type:raw.code_type??(known?.plu===String(raw.plu)?known.code_type:undefined)}:raw);if(item.error)return fail(item.error);
    if(seen.has(item.plu))return fail('Duplicate PLU inside import.');seen.add(item.plu);
    if(raw.id!==undefined&&(!Number.isSafeInteger(raw.id)||raw.id<1))return fail('Invalid item ID.');
    const current=raw.id===undefined?getItemByPlu(item.plu):getItemById(raw.id);
@@ -69,7 +70,7 @@ function createStore(filename=process.env.PLU_DB_PATH||path.join(__dirname,'..',
   for(const row of plan){if(row.action==='create')createItem(row.after,actor);else{const r=updateItem(row.id,row.after,row.revision,actor);if(r.error)throw Error('Bulk revision changed');}}return{ok:true,count:plan.length};
  });
  return {db,createItem,updateItem,deleteItem,undoItem,restoreItem:(id,actor)=>undoItem(id,actor,true),seedItems,getItemById,getItemByPlu,previewBulk,applyBulk,
-  listItems:()=>db.prepare("SELECT id,name,plu,cat,revision,COALESCE(NULLIF(updated_at,''),created_at) AS updated_at,organic,storage,locations,sale_unit,aliases,photo FROM items ORDER BY name COLLATE NOCASE").all().map(decode),
+  listItems:()=>db.prepare("SELECT id,name,plu,cat,revision,COALESCE(NULLIF(updated_at,''),created_at) AS updated_at,organic,storage,locations,sale_unit,aliases,photo,code_type FROM items ORDER BY name COLLATE NOCASE").all().map(decode),
   countItems:()=>db.prepare('SELECT count(*) n FROM items').get().n,revision:()=>db.prepare('SELECT revision FROM catalog_meta WHERE id=1').get().revision,
   listAudit:()=>db.prepare('SELECT * FROM item_audit ORDER BY id DESC LIMIT 40').all(),close:()=>db.close()};
 }

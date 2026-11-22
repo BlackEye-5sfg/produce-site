@@ -1,3 +1,4 @@
+const {validateCode}=require('./codes');
 // Shared validation vocabulary. Unspecified tags are deliberately unknown, not guessed.
 const CATEGORIES = { veg: 'Vegetables', fruit: 'Fruit', herbs: 'Herbs', dry: 'Pantry' };
 const TAGS = {
@@ -9,11 +10,11 @@ const TAGS = {
 function validateItem(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Invalid item.' };
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const plu = String(body.plu ?? '').trim(), cat = String(body.cat || '').toLowerCase();
+  const plu = typeof body.plu==='string'?body.plu.trim():(typeof body.plu==='number'&&/^\d{4,5}$/.test(String(body.plu))?String(body.plu):body.plu), cat = String(body.cat || '').toLowerCase();
   if (!name || name.length > 120 || /[\x00-\x1f]/.test(name)) return { error: 'Enter a name of 1 to 120 characters without control characters.' };
-  if (!/^\d{4,5}$/.test(plu)) return { error: 'PLU must contain 4 or 5 digits.' };
+  const code=validateCode(plu,body.code_type);if(code.error)return{error:code.error};
   if (!Object.hasOwn(CATEGORIES,cat)) return { error: 'Choose Vegetables, Fruit, Herbs or Pantry.' };
-  const item = { name, plu, cat };
+  const item = { name, plu:code.value, cat, code_type:code.type };
   for (const key of ['organic','storage','sale_unit']) {
     if (body[key] === undefined) continue;
     if (typeof body[key] !== 'string' || (body[key] !== '' && !Object.hasOwn(TAGS[key],body[key]))) return { error: `Invalid ${key} tag.` };
@@ -46,8 +47,8 @@ function parseImport(text) {
   if(text.startsWith('['))rows=JSON.parse(text);
   else {
     const csv=csvRows(text),headers=(csv.shift()||[]).map(x=>x.trim().toLowerCase());
-    const allowed=['id','revision','name','plu','cat','organic','storage','locations','sale_unit','aliases'];
-    if(!['name','plu','cat'].every(x=>headers.includes(x))||new Set(headers).size!==headers.length||headers.some(x=>!allowed.includes(x)))throw Error('CSV needs name,plu,cat; optional id,revision,organic,storage,locations,sale_unit,aliases.');
+    const allowed=['id','revision','name','plu','cat','code_type','organic','storage','locations','sale_unit','aliases'];
+    if(!['name','plu','cat'].every(x=>headers.includes(x))||new Set(headers).size!==headers.length||headers.some(x=>!allowed.includes(x)))throw Error('CSV needs name,plu,cat; optional id,revision,code_type,organic,storage,locations,sale_unit,aliases.');
     rows=csv.map((values,index)=>{if(values.length!==headers.length)throw Error(`CSV row${index+2} has the wrong column count.`);const row=Object.fromEntries(headers.map((h,i)=>[h,values[i].trim()]));
       for(const k of ['id','revision']){if(row[k])row[k]=Number(row[k]);else delete row[k];}
       for(const k of ['locations','aliases'])if(row[k]!==undefined)row[k]=row[k]?row[k].split('|').map(x=>x.trim()).filter(Boolean):[];
