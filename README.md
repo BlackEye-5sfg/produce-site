@@ -15,7 +15,7 @@ A small produce reference website and Android companion sharing one Express API 
 
 ## Private sales-floor list (2.4)
 
-Floor list is a free-text checklist, separate from the shared catalogue. Each line can be edited, checked or deleted. Enter / mobile next-line creates the next row at the caret; multiline paste creates separate rows. IME composition is not treated as Enter. Add item also opens a blank line. Android Back closes the list without erasing it, and normal navigation/refresh of catalogue data does not overwrite it.
+Floor list is a free-text checklist, separate from the shared catalogue. Each line can be edited, checked or deleted. The2.4.1 Hide checked toggle temporarily hides completed rows without deleting them, keeping their text/check state and full counts. Turn it off to review/uncheck them. The toggle itself is session-only and defaults off in a new session. Enter / mobile next-line creates the next row at the caret; multiline paste creates separate rows. IME composition is not treated as Enter. Add item also opens a blank line. Android Back closes the list without erasing it, and normal navigation/refresh of catalogue data does not overwrite it.
 
 The list exists **only in this open page/app session's memory**. No API, database, file, localStorage/sessionStorage, sharing or synchronization is used. Reloading, restarting or the OS reclaiming the app clears it. Simply backgrounding the still-running app or closing/reopening the list retains it. It works offline without an admin login and does not populate the catalogue. Limits:200 rows/1000 characters per row; oversized edits/pastes are rejected rather than clipped. Content is rendered as literal text, not HTML. Physical Android IME behavior needs device testing.
 

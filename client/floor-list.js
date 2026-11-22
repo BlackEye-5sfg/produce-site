@@ -23,21 +23,24 @@ function createFloorList(){
 function mountFloorList(document){
  const $=s=>document.querySelector(s),dialog=$('#floor-list-dialog'),root=$('#floor-list-rows'),list=createFloorList();
  if(!dialog||!root)return; // Older cached website HTML must still load its reader safely.
+ const hide=$('#floor-hide-checked');if(hide)hide.checked=false;
+ function visibility(){for(const row of list.rows){const line=root.querySelector(`[data-row="${row.id}"]`);if(line){line.hidden=Boolean(hide?.checked&&row.checked);if(!line.hidden)height(line.querySelector('textarea'));}}const empty=$('#floor-list-no-visible');if(empty)empty.hidden=!list.rows.every(x=>hide?.checked&&x.checked);}
+ if(hide)hide.onchange=visibility;
  function status(){const rows=list.rows.filter(x=>x.text.trim()),done=rows.filter(x=>x.checked).length;$('#floor-list-count').textContent=`${rows.length-done} needed · ${done} checked`;}
- function focus(id,caret){const input=root.querySelector(`[data-row="${id}"] textarea`);if(!input)return;input.focus();input.setSelectionRange(caret??input.value.length,caret??input.value.length);input.scrollIntoView({block:'nearest'});}
+ function focus(id,caret){let input=root.querySelector(`[data-row="${id}"] textarea`);if(input?.closest('.floor-list-row').hidden)input=root.querySelector('.floor-list-row:not([hidden]) textarea');if(!input){$('#add-floor-item').focus();return;}input.focus();input.setSelectionRange(caret??input.value.length,caret??input.value.length);input.scrollIntoView({block:'nearest'});}
  function height(input){input.style.height='auto';input.style.height=Math.max(44,input.scrollHeight)+'px';}
  function error(e){$('#floor-list-error').textContent=e.message;}
  function apply(row,input){if(!input.isConnected)return;try{const result=list.edit(row.id,input.value,input.selectionStart);$('#floor-list-error').textContent='';if(result.split){render();focus(result.id,result.caret);}else{height(input);status();}}catch(e){input.value=list.rows.find(x=>x.id===row.id).text;height(input);error(e);}}
  function render(){root.replaceChildren();for(const row of list.rows){
   const line=document.createElement('div');line.className='floor-list-row';line.dataset.row=row.id;line.classList.toggle('checked',row.checked);
-  const check=document.createElement('input');check.type='checkbox';check.checked=row.checked;check.setAttribute('aria-label','Mark item checked');check.onchange=()=>{list.check(row.id,check.checked);line.classList.toggle('checked',check.checked);status();};
+  const check=document.createElement('input');check.type='checkbox';check.checked=row.checked;check.setAttribute('aria-label','Mark item checked');check.onchange=()=>{list.check(row.id,check.checked);line.classList.toggle('checked',check.checked);status();visibility();if(line.hidden){const next=root.querySelector('.floor-list-row:not([hidden]) input[type=checkbox]');(next||$('#add-floor-item')).focus();}};
   const input=document.createElement('textarea');input.rows=1;input.value=row.text;input.placeholder='What does the floor need?';input.setAttribute('aria-label','Sales-floor item');input.setAttribute('enterkeyhint','enter');input.autocomplete='off';input.dataset.private='session-only';
   input.addEventListener('keydown',e=>{if(!input.isConnected)return;if(e.key!=='Enter'||e.isComposing||e.keyCode===229)return;e.preventDefault();try{const result=list.breakLine(row.id,input.selectionStart,input.selectionEnd);$('#floor-list-error').textContent='';render();focus(result.id,result.caret);}catch(err){error(err);}});
   input.addEventListener('beforeinput',e=>{if(!input.isConnected)return;if(!['insertLineBreak','insertParagraph'].includes(e.inputType)||e.isComposing||!e.cancelable)return;e.preventDefault();try{const result=list.breakLine(row.id,input.selectionStart,input.selectionEnd);$('#floor-list-error').textContent='';render();focus(result.id,result.caret);}catch(err){error(err);}});
   input.addEventListener('input',e=>{if(!e.isComposing)apply(row,input);});input.addEventListener('compositionend',()=>apply(row,input));
   const remove=document.createElement('button');remove.type='button';remove.className='icon-btn';remove.textContent='×';remove.setAttribute('aria-label','Delete item');remove.onclick=()=>{const id=list.remove(row.id);$('#floor-list-error').textContent='';render();focus(id);};
   line.append(check,input,remove);root.append(line);height(input);
- }status();}
+ }status();visibility();}
  function open(){if(!dialog.open)dialog.showModal();for(const input of root.querySelectorAll('textarea'))height(input);focus(list.rows.at(-1).id);}
  $('#open-floor-list').onclick=open;$('#nav-floor-list').onclick=open;$('#close-floor-list').onclick=()=>dialog.close();$('#add-floor-item').onclick=()=>{try{const id=list.add();$('#floor-list-error').textContent='';render();focus(id);}catch(e){error(e);}};
  render();
