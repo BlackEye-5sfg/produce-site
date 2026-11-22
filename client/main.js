@@ -1,4 +1,5 @@
 import JsBarcode from 'jsbarcode';
+import { setupAppUpdates } from './app-updates';
 import '../public/js/search.js';
 import { native, mobileBrowser, request, me, login, mediaURL } from './api';
 import { mountEditor } from './editor';
@@ -124,3 +125,5 @@ if (page === 'login') {
   try { const cached = JSON.parse(localStorage.getItem('plu:catalog:v2') || '{}'); if (Array.isArray(cached.items)) { items = cached.items; lastSync = cached.lastSync; render(); freshness(true);$('#sync-status').textContent+=' · checking for updates'; } } catch {}
   refresh();
 }
+
+if(page==='reader')setupAppUpdates();

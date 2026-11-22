@@ -13,6 +13,16 @@ A small produce reference website and Android companion sharing one Express API 
 
 **The mobile-browser gate is deliberately best-effort.** User-Agent checks can be spoofed. Password/session or app-token authorization remains mandatory on all writes; an app install or a forged app header grants no privilege.
 
+## Android app updates (2.2)
+
+One manual installation of the signed2.2.0 APK is needed to add the updater to older versions. After that the app checks the first-party HTTPS release feed on launch, when returning to the foreground/online (four-hour successful-check cooldown), and periodically while visible. Updates has a manual Check now button.
+
+Automatic downloading defaults to unmetered connections and can be disabled. Manual Download permits your chosen connection. Background/closed-app monitoring is not promised. The app never silently installs or grants itself installation privileges: Android's normal installer asks for approval. Android8+ may first require allowing PLU Hub as an installation source in system settings. An installer opening is not reported as a completed installation; canceling leaves the current app working.
+
+The native updater accepts only fixed-origin immutable APK URLs. Downloads reject redirects, oversize/timeout responses and mismatched size/SHA256, package ID, exact release code/name, installed signer or non-forward versions. The Android package installer independently validates the APK/signature. Files stay in a restricted update-cache directory exposed read-only through an unexported scoped FileProvider. No root, device-owner setup, external-storage write or new account/key is required.
+
+Release publishing: CI builds/tests the signed APK then generates `latest.json` beside it with `node scripts/release-manifest.js SIGNED.apk OUTPUT.json`. Before publishing, independently verify APK signature/certificate and that metadata matches bytes/version. Upload the immutable APK to its `/downloads/plu-hub-VERSION.apk` URL, verify the hosted hash, THEN atomically replace `public/updates/latest.json`. Never advertise an APK that is unavailable/unverified, reuse a versioned URL for different bytes, or embed signing/admin secrets. Version codes must increase. The app bypasses stale feed caches with a unique check query; webpage asset URLs are versioned separately. Runtime published metadata is excluded from Git. Future catalogue changes do not require an app update; they still use the shared API.
+
 ## Lookup and editing tools (2.1)
 
 Categories: Vegetables, Fruit, Herbs and Pantry. Existing `dry` entries remain Pantry; existing categories, IDs and codes are not automatically reclassified. Optional tags: Organic/Normal (conventional), Cooler/Ambient, Table/Wet wall/Bunker/Counter (multiple display locations), By weight/Each. Unset means unknown, never inferred.

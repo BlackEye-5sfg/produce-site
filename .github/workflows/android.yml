@@ -1,7 +1,7 @@
 name: Android APK and backend checks
 on:
   push:
-    branches: [jinx/plu-hub-android-desktop-admin, jinx/plu-hub-dark-purple, jinx/plu-hub-tags-tools]
+    branches: [jinx/plu-hub-android-desktop-admin, jinx/plu-hub-dark-purple, jinx/plu-hub-tags-tools, jinx/plu-hub-app-updater]
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,11 +34,15 @@ jobs:
           test -s "$PLU_KEYSTORE_PATH"
           cd android
           chmod +x gradlew
-          ./gradlew --no-daemon --max-workers=2 assembleRelease
+          ./gradlew --no-daemon --max-workers=2 :app:testDebugUnitTest :app:assembleRelease
           test -f app/build/outputs/apk/release/app-release.apk
+          cd ..
+          node scripts/release-manifest.js android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/latest.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: PLU-Hub-Android
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/latest.json
           if-no-files-found: error
           retention-days: 14

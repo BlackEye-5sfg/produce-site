@@ -19,6 +19,11 @@ buildscript {
 apply from: "variables.gradle"
 
 allprojects {
+    // Subproject buildscript classpaths (including Capacitor) need the mirror too.
+    buildscript.repositories {
+        google()
+        maven { url 'https://maven-central.storage-download.googleapis.com/maven2' }
+    }
     repositories {
         google()
         // Official Google-hosted Maven Central mirror avoids shared-runner429s.
