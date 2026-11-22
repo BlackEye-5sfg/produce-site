@@ -13,6 +13,22 @@ A small produce reference website and Android companion sharing one Express API 
 
 **The mobile-browser gate is deliberately best-effort.** User-Agent checks can be spoofed. Password/session or app-token authorization remains mandatory on all writes; an app install or a forged app header grants no privilege.
 
+## Lookup and editing tools (2.1)
+
+Categories: Vegetables, Fruit, Herbs and Pantry. Existing `dry` entries remain Pantry; existing categories, IDs and codes are not automatically reclassified. Optional tags: Organic/Normal (conventional), Cooler/Ambient, Table/Wet wall/Bunker/Counter (multiple display locations), By weight/Each. Unset means unknown, never inferred.
+
+Recent lookups (12), pinned favorites and checkout display preferences are device-local. Search supports item aliases, synonyms and bounded spelling tolerance for words, never fuzzy numeric PLUs. Similar-item suggestions are warnings to compare exact labels, not recommendations to substitute a code.
+
+Bulk tools accept JSON or CSV, up to100 rows/200KB of input. CSV needs `name,plu,cat`; optional `id,revision,organic,storage,locations,sale_unit,aliases`. Lists use `|`. Existing PLUs update; new PLUs add. All changes must be previewed then explicitly confirmed. Previews expire after ten minutes, belong to the login session, are single-use and reject a changed catalogue. The whole confirmation transaction rolls back on failure. No external PLU list is imported automatically.
+
+Recent activity offers safe undo for create/update/photo and deleted-item restore. Undo is refused if the item changed afterward; it never rolls item revisions backward. Activity shows the latest40 events, including individual bulk changes.
+
+Photos: edit an existing item, choose an appropriate image you have permission to publish, then Upload. The client resizes/re-encodes it (stripping metadata); authenticated server endpoints accept bounded JPEG/PNG data (512KB, up to1600px per side), stored outside source under `data/photos`,100MB total. Photos are public catalogue assets. There is no arbitrary-URL fetching, SVG upload or camera permission. Removing/undoing a photo retains its immutable file for historical recovery; no automatic photo deletion. Cached descriptions work offline; photos may require a connection.
+
+Checkout display enlarges digits. The code dialog has a barcode-size slider and an explicit screen-awake toggle. Android uses a small foreground window-flag plugin, with no background CPU wake lock/extra permission. Browsers use Screen Wake Lock where supported; unsupported requests report that clearly. Closing the code or hiding the page releases the request. Real Android screen behavior and checkout scanner compatibility still need device testing.
+
+The migration transaction expands the category CHECK and adds metadata, preserving existing IDs, Spanish names, dates, audit/session tables and the AUTOINCREMENT high-water mark. Unknown custom columns or external item foreign keys stop migration for review instead of silently discarding them. Old API clients omitting tag fields do not erase them.
+
 ## Architecture
 
 Website + Android app -> HTTPS Express API -> one server-side `data/plu.db` database.

@@ -1,10 +1,12 @@
 import JsBarcode from 'jsbarcode';
 import '../public/js/search.js';
-import { native, mobileBrowser, request, me, login } from './api';
+import { native, mobileBrowser, request, me, login, mediaURL } from './api';
 import { mountEditor } from './editor';
+import { CATEGORIES, TAGS, tagLabels } from '../shared/catalog';
+import { similarItems, screenAwake } from './lookup-tools';
 const $ = s => document.querySelector(s);
 const page = document.body.dataset.page;
-const labels = { fruit: 'Fruit', veg: 'Vegetables', dry: 'Pantry' };
+const labels = CATEGORIES;
 function showError(el, text) { el.textContent = text; el.classList.add('bad'); }
 
 if (page === 'login') {
@@ -17,7 +19,8 @@ if (page === 'login') {
 } else if (page === 'admin') {
   me().then(x => { if (!x.authenticated) location.href = '/login.html'; else mountEditor($('#desktop-editor')); }).catch(() => { location.href = '/login.html'; });
 } else {
-  let items = [], category = 'all', favoritesOnly = false, lastSync = null;
+  let items = [], category = 'all', favoritesOnly = false, lastSync = null, offline = false, recent = [], currentDetail = null;
+  try { recent = JSON.parse(localStorage.getItem('plu:recent:v1') || '[]'); if(!Array.isArray(recent))recent=[]; } catch {}
   let favorites;
   try { favorites = new Set(JSON.parse(localStorage.getItem('plu:favorites:v2') || '[]')); } catch { favorites = new Set(); }
   const safeStore = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -29,13 +32,38 @@ if (page === 'login') {
     try { JsBarcode(svg, '000000' + String(plu).padStart(5, '0'), { format: 'upc', width: large ? 2.2 : 1.35, height: large ? 85 : 42, fontSize: large ? 20 : 11, margin: 8, background: '#fff', lineColor: '#132922', displayValue: true }); }
     catch { svg.replaceWith(document.createTextNode(`PLU ${plu}`)); }
   }
-  function freshness(offline = false) {
-    $('#sync-status').textContent = offline ? `Offline copy${lastSync ? ' · '+new Date(lastSync).toLocaleString() : ''}` : `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    $('#sync-status').classList.toggle('offline', offline);
+  function freshness(failed = false) {
+    offline=failed;const stamp=lastSync?new Date(lastSync).toLocaleString():null;
+    $('#sync-status').textContent = `${failed?'Offline · saved catalogue':'Synced'}${stamp?' · '+stamp:' · no saved copy'}`;
+    $('#sync-status').title=stamp?`Last successful refresh: ${stamp} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`:'No successful refresh yet';
+    $('#sync-status').classList.toggle('offline', failed);
   }
+  for(const key of Object.keys(TAGS)){
+    const label=document.createElement('label');label.textContent=({organic:'Growing method',storage:'Storage',locations:'Display location',sale_unit:'Sold by'})[key];const select=document.createElement('select');select.dataset.tag=key;select.setAttribute('aria-label',label.textContent);select.add(new Option('All',''));for(const [value,text]of Object.entries(TAGS[key]))select.add(new Option(text,value));select.onchange=render;label.append(select);$('#tag-filters').append(label);
+  }
+  $('#clear-filters').onclick=()=>{for(const s of document.querySelectorAll('[data-tag]'))s.value='';render();};
+  try{$('#checkout-mode').checked=JSON.parse(localStorage.getItem('plu:checkout:v1')||'false')===true;}catch{}
+  const checkout=()=>{document.body.classList.toggle('checkout-view',$('#checkout-mode').checked);safeStore('plu:checkout:v1',$('#checkout-mode').checked);};$('#checkout-mode').onchange=checkout;checkout();
+  function quick(){
+    for(const [ids,parent,section]of [[Array.from(favorites),'#pinned-items','#pinned-section'],[recent,'#recent-items','#recent-section']]){
+      const root=$(parent);root.replaceChildren();for(const id of ids.slice(0,12)){const item=items.find(x=>x.id===id);if(!item)continue;const b=document.createElement('button');b.className='quick-item';b.textContent=`${item.plu} · ${item.name}`;b.onclick=()=>openDetail(item);root.append(b);}$(section).hidden=!root.children.length;
+    }
+  }
+  $('#clear-recent').onclick=()=>{recent=[];safeStore('plu:recent:v1',recent);quick();};
+  function openDetail(item){
+    currentDetail=item;recent=[item.id,...recent.filter(x=>x!==item.id)].slice(0,12);safeStore('plu:recent:v1',recent);quick();
+    $('#detail-name').textContent=item.name;$('#detail-plu').textContent=item.plu;$('#detail-tags').textContent=tagLabels(item).join(' · ')||'Tags not set';
+    const target=$('#detail-barcode');target.replaceChildren();const big=document.createElementNS('http://www.w3.org/2000/svg','svg');target.append(big);barcode(big,item.plu,true);big.style.width=$('#barcode-size').value+'%';
+    const similar=similarItems(item,items);const list=$('#similar-items');list.replaceChildren();for(const other of similar){const b=document.createElement('button');b.className='quick-item';b.textContent=`${other.name} · ${other.plu}${tagLabels(other).length?' · '+tagLabels(other).join(', '):''}`;b.onclick=()=>openDetail(other);list.append(b);}$('#similar-section').hidden=!similar.length;
+    if(!$('#detail-dialog').open)$('#detail-dialog').showModal();
+  }
+  $('#barcode-size').oninput=()=>{const svg=$('#detail-barcode svg');if(svg)svg.style.width=$('#barcode-size').value+'%';};
+  $('#keep-awake').onchange=async()=>{try{const active=await screenAwake($('#keep-awake').checked);$('#awake-status').textContent=active?'Screen awake while this code is open.':'';}catch(e){$('#keep-awake').checked=false;$('#awake-status').textContent=e.message;}};
+  $('#detail-dialog').addEventListener('close',()=>{$('#keep-awake').checked=false;$('#awake-status').textContent='';screenAwake(false).catch(()=>{});});
   function render() {
     const query = $('#search').value.trim().toLowerCase();
-    const filtered = window.PLUSearch.searchItems(items, query, category).filter(i => !favoritesOnly || favorites.has(i.id));
+    const filtered = window.PLUSearch.searchItems(items, query, category).filter(i => (!favoritesOnly || favorites.has(i.id)) && [...document.querySelectorAll('[data-tag]')].every(s=>!s.value||(s.dataset.tag==='locations'?(i.locations||[]).includes(s.value):i[s.dataset.tag]===s.value)));
+    quick();
     $('#count').textContent = `${filtered.length} ${filtered.length === 1 ? 'item' : 'items'}`;
     const grid = $('#grid'); grid.replaceChildren(); $('#empty').hidden = filtered.length > 0;
     for (const item of filtered) {
@@ -49,15 +77,15 @@ if (page === 'login') {
       const plu = document.createElement('p'); plu.className = 'plu-number'; plu.textContent = item.plu;
       const open = document.createElement('button'); open.className = 'barcode-button'; open.setAttribute('aria-label', `Show larger barcode for ${item.name}`);
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); open.append(svg); barcode(svg, item.plu);
-      open.onclick = () => {
-        $('#detail-name').textContent = item.name; $('#detail-plu').textContent = item.plu;
-        const target = $('#detail-barcode'); target.replaceChildren(); const big = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); target.append(big); barcode(big, item.plu, true); $('#detail-dialog').showModal();
-      };
-      card.append(top, name, plu, open); grid.append(card);
+      open.onclick = () => openDetail(item);
+      const tags=document.createElement('p');tags.className='item-tags';tags.textContent=tagLabels(item).join(' · ');
+      card.append(top);
+      const photo=mediaURL(item.photo);if(photo){const img=document.createElement('img');img.className='product-photo';img.src=photo;img.alt=item.name;img.loading='lazy';img.onerror=()=>{img.hidden=true;};card.append(img);}
+      card.append(name, tags, plu, open); grid.append(card);
     }
   }
   async function refresh() {
-    try { const data = await request('/api/items'); if (!Array.isArray(data)) throw new Error('Invalid catalog'); items = data; lastSync = Date.now(); safeStore('plu:catalog:v2', { items, lastSync }); $('#empty').textContent = 'No matching produce. Try a name or a four/five-digit code.'; freshness(); render(); }
+    try { const data = await request('/api/items'); if (!Array.isArray(data)) throw new Error('Invalid catalog'); items = data; lastSync = Date.now(); safeStore('plu:catalog:v2', { items, lastSync }); $('#empty').textContent = 'No matching produce. Try a name or a four/five-digit code.'; freshness(false); render(); }
     catch {
       if (!items.length) { try { const cached = JSON.parse(localStorage.getItem('plu:catalog:v2') || '{}'); items = Array.isArray(cached.items) ? cached.items : []; lastSync = cached.lastSync; } catch {} }
       freshness(true); render(); if (!items.length) $('#empty').textContent = 'Could not load the catalog. Check your connection and try Refresh.';
@@ -85,7 +113,7 @@ if (page === 'login') {
     try { await login(f.elements.username.value.trim(), f.elements.password.value); f.elements.password.value = ''; $('#native-login').close(); await openEditor(); }
     catch (err) { showError($('#native-login-error'), err.message); } finally { submit.disabled = false; }
   };
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); else { $('#keep-awake').checked=false;screenAwake(false).catch(()=>{});$('#awake-status').textContent=''; } });
   window.addEventListener('online', refresh); window.addEventListener('focus', refresh);
   setInterval(() => { if (!document.hidden) refresh(); }, 30000);
   if (!native && typeof EventSource !== 'undefined') {
@@ -93,6 +121,6 @@ if (page === 'login') {
     events.addEventListener('catalog', () => { clearTimeout(timer); timer = setTimeout(refresh, 150); });
     window.addEventListener('pagehide', () => events.close(), { once: true });
   }
-  try { const cached = JSON.parse(localStorage.getItem('plu:catalog:v2') || '{}'); if (Array.isArray(cached.items)) { items = cached.items; lastSync = cached.lastSync; render(); $('#sync-status').textContent = 'Saved catalog · checking for updates'; } } catch {}
+  try { const cached = JSON.parse(localStorage.getItem('plu:catalog:v2') || '{}'); if (Array.isArray(cached.items)) { items = cached.items; lastSync = cached.lastSync; render(); freshness(true);$('#sync-status').textContent+=' · checking for updates'; } } catch {}
   refresh();
 }

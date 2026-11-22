@@ -22,6 +22,14 @@
     potatoes: ["potato"],
     roma: ["tomato", "tomatoes", "plum"],
     russet: ["potato", "potatoes"],
+    cilantro: ["coriander"],
+    coriander: ["cilantro"],
+    aubergine: ["eggplant"],
+    eggplant: ["aubergine"],
+    courgette: ["zucchini", "squash"],
+    rocket: ["arugula"],
+    arugula: ["rocket"],
+    spring: ["green", "scallion"],
     scallion: ["scallions", "onion", "onions", "green"],
     scallions: ["scallion", "onion", "onions", "green"],
     slicer: ["tomato", "tomatoes"],
@@ -54,7 +62,13 @@
 
   function wordMatch(candidate, queryToken) {
     if (!candidate || !queryToken) return false;
+    if (/^\d+$/.test(queryToken)) return /^\d+$/.test(candidate) && candidate.includes(queryToken);
     if (candidate === queryToken) return true;
+    if (candidate.length >= 4 && queryToken.length >= 4 && Math.abs(candidate.length-queryToken.length)<=1) {
+      // Bounded edit-distance1, including common adjacent transposition typos.
+      if(candidate.length===queryToken.length){const dif=[];for(let i=0;i<candidate.length;i++)if(candidate[i]!==queryToken[i])dif.push(i);if(dif.length===1||(dif.length===2&&dif[1]===dif[0]+1&&candidate[dif[0]]===queryToken[dif[1]]&&candidate[dif[1]]===queryToken[dif[0]]))return true;}
+      else{const shorter=candidate.length<queryToken.length?candidate:queryToken,longer=candidate.length>queryToken.length?candidate:queryToken;let a=0,b=0,skips=0;while(a<shorter.length&&b<longer.length){if(shorter[a]===longer[b]){a++;b++;}else{b++;skips++;}}if(skips<=1)return true;}
+    }
     if (candidate.startsWith(queryToken)) return true;
     if (queryToken.startsWith(candidate) && candidate.length >= 3) return true;
     return expand(candidate).some((alias) => alias === queryToken || alias.startsWith(queryToken));
@@ -74,6 +88,7 @@
       if (plu === n) return 1000;
       if (plu.startsWith(n)) return 850;
       if (plu.includes(n)) return 500;
+      return 0; // Never fuzzy-match a numeric PLU.
     }
 
     const sameWords =
@@ -84,7 +99,7 @@
     if (nameJoined === qJoined) return 940;
     if (nameJoined.startsWith(qJoined)) return 800;
 
-    const pool = [...nameTokens, item.cat, plu].filter(Boolean);
+    const pool = [...nameTokens.flatMap(expand), ...tokens((item.aliases || []).join(" ")), ...tokens(item.es), item.cat, plu].filter(Boolean);
     const leftover = [...pool];
     for (const qt of qTokens) {
       const idx = leftover.findIndex((nt) => wordMatch(nt, qt) || nt.includes(qt));

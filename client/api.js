@@ -22,7 +22,7 @@ export async function request(path, { method = 'GET', data } = {}) {
     status = r.status; body = await r.json().catch(() => ({}));
   }
   if (status < 200 || status >= 300) {
-    const e = new Error(body.error || `Request failed (${status})`); e.status = status; throw e;
+    const e = new Error(body.error || `Request failed (${status})`); e.status = status; e.details = body.errors; throw e;
   }
   return body;
 }
@@ -42,3 +42,5 @@ export async function logout() {
   finally { appToken = null; csrf = null; }
 }
 // Only public catalog/favorites are persisted. Passwords and admin bearer tokens are never stored in localStorage/APK.
+
+export const mediaURL = path => /^\/photos\/[a-f0-9]{64}\.(jpg|png)$/.test(path || '') ? (native ? BASE : '') + path : '';
