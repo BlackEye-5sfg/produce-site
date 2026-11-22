@@ -3,6 +3,7 @@ import { setupAppUpdates } from './app-updates';
 import '../public/js/search.js';
 import { native, mobileBrowser, request, me, login, mediaURL } from './api';
 import { mountEditor } from './editor';
+import {mountFloorList} from './floor-list';
 import {createBackHandler,createViewHistory} from './navigation';
 import {barcodeSpec,CODE_TYPES} from '../shared/codes';
 import { CATEGORIES, TAGS, tagLabels } from '../shared/catalog';
@@ -22,6 +23,7 @@ if (page === 'login') {
 } else if (page === 'admin') {
   me().then(x => { if (!x.authenticated) location.href = '/login.html'; else mountEditor($('#desktop-editor')); }).catch(() => { location.href = '/login.html'; });
 } else {
+  mountFloorList(document);
   let items = [], category = 'all', favoritesOnly = false, lastSync = null, offline = false, recent = [], currentDetail = null;
   try { recent = JSON.parse(localStorage.getItem('plu:recent:v1') || '[]'); if(!Array.isArray(recent))recent=[]; } catch {}
   let favorites;
