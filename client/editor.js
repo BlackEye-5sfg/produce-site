@@ -4,7 +4,7 @@ import { resizedPhoto } from './lookup-tools';
 import {scanBarcode} from './barcode-scanner';
 import {CODE_TYPES,validateCode} from '../shared/codes';
 export function mountEditor(root, { onChange = () => {}, onLogout = () => {} } = {}) {
-  let items = [], editing = null, previewId = null, photoBusy = false, scanBusy = false;
+  let items = [], editing = null, previewId = null, photoBusy = false, scanBusy = false, saveBusy=false, bulkBusy=false;
   root.innerHTML = `<div class="editor-top"><div><p class="eyebrow">YOUR CATALOG</p><h1>Make a little change.</h1><p class="muted">One catalog. Changes show on the website and app.</p></div><button class="btn quiet" id="signout">Sign out</button></div>
   <div class="editor-tools"><label class="search compact"><span>⌕</span><input id="admin-search" type="search" placeholder="Find a name or PLU…" aria-label="Search catalog"></label><button class="btn" id="new-item">＋ Add item</button><button class="btn quiet" id="scan-add" hidden>Scan to add</button><button class="btn quiet" id="history">Activity</button><button class="btn quiet" id="bulk-tools">Bulk edit / import</button><button class="btn quiet" id="refresh-admin">Refresh</button></div>
   <p id="editor-status" role="status" class="message"></p><div class="table-wrap"><table><thead><tr><th>Produce</th><th>Code</th><th>Category</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="admin-rows"></tbody></table></div>
@@ -60,19 +60,19 @@ export function mountEditor(root, { onChange = () => {}, onLogout = () => {} } =
     form.elements.code_type.value=item?.code_type||'auto';$('#code-status').textContent='';form.elements.aliases.value=(item?.aliases||[]).join('\n');for(const c of root.querySelectorAll('[name=locations]'))c.checked=(item?.locations||[]).includes(c.value);photoView();
     $('#item-dialog').showModal();
   }
-  $('#new-item').onclick = () => open(); $('#close-item').onclick = () => {if(!photoBusy&&!scanBusy)$('#item-dialog').close();}; $('#item-dialog').addEventListener('cancel',e=>{if(photoBusy||scanBusy)e.preventDefault();});
+  $('#new-item').onclick = () => open(); $('#close-item').onclick = () => {if(!photoBusy&&!scanBusy&&!saveBusy)$('#item-dialog').close();}; $('#item-dialog').addEventListener('cancel',e=>{if(photoBusy||scanBusy||saveBusy)e.preventDefault();});
   $('#close-history').onclick = () => $('#history-dialog').close(); $('#admin-search').oninput = render; $('#refresh-admin').onclick = () => refresh().then(() => status('Catalog refreshed.')).catch(e => status(e.message, true));
   $('#signout').onclick = async () => { await logout().catch(() => {}); if (native) onLogout(); else location.href = '/'; };
   $('#item-form').onsubmit = async e => {
-    e.preventDefault(); const f = new FormData(e.target); const data = { name: f.get('name'), plu: f.get('plu'), cat: f.get('cat'), code_type:f.get('code_type'), organic:f.get('organic'),storage:f.get('storage'),sale_unit:f.get('sale_unit'),locations:f.getAll('locations'),aliases:String(f.get('aliases')||'').split('\n').map(x=>x.trim()).filter(Boolean) };
+    e.preventDefault();if(saveBusy||photoBusy||scanBusy)return; const f = new FormData(e.target); const data = { name: f.get('name'), plu: f.get('plu'), cat: f.get('cat'), code_type:f.get('code_type'), organic:f.get('organic'),storage:f.get('storage'),sale_unit:f.get('sale_unit'),locations:f.getAll('locations'),aliases:String(f.get('aliases')||'').split('\n').map(x=>x.trim()).filter(Boolean) };
     const checkedCode=validateCode(String(data.plu||'').trim(),data.code_type);if(checkedCode.error){$('#form-error').textContent=checkedCode.error;return;}data.plu=checkedCode.value;data.code_type=checkedCode.type;
     if (editing) data.revision = editing.revision;
-    $('#save-item').disabled = true; $('#form-error').textContent = '';
+    saveBusy=true;$('#save-item').disabled = true; $('#form-error').textContent = '';
     try {
       await request(editing ? `${adminPath}/${editing.id}` : adminPath, { method: editing ? 'PATCH' : 'POST', data });
       $('#item-dialog').close(); await refresh(); onChange(); status(editing ? 'Changes saved.' : 'Item added.');
     } catch (err) { $('#form-error').textContent = err.message; }
-    finally { $('#save-item').disabled = false; }
+    finally { saveBusy=false;$('#save-item').disabled = false; }
   };
   $('#history').onclick = async () => {
     try {
@@ -94,7 +94,7 @@ export function mountEditor(root, { onChange = () => {}, onLogout = () => {} } =
     } catch (e) { status(e.message, true); }
   };
   const invalidate=()=>{previewId=null;$('#confirm-bulk').hidden=true;$('#bulk-preview').replaceChildren();};
-  $('#bulk-tools').onclick=()=>{$('#bulk-error').textContent='';invalidate();$('#bulk-dialog').showModal();};$('#close-bulk').onclick=()=>$('#bulk-dialog').close();$('#bulk-input').oninput=invalidate;
+  $('#bulk-tools').onclick=()=>{$('#bulk-error').textContent='';invalidate();$('#bulk-dialog').showModal();};$('#close-bulk').onclick=()=>{if(!bulkBusy)$('#bulk-dialog').close();};$('#bulk-dialog').addEventListener('cancel',e=>{if(bulkBusy)e.preventDefault();});$('#bulk-input').oninput=invalidate;
   $('#bulk-file').onchange=async()=>{const file=$('#bulk-file').files[0];if(!file)return;if(file.size>200000){$('#bulk-error').textContent='File limit is200KB.';return;}$('#bulk-input').value=await file.text();invalidate();};
   $('#load-filtered').onclick=()=>{const list=window.PLUSearch.searchItems(items,$('#admin-search').value,'all');if(list.length>100){$('#bulk-error').textContent='Narrow the search to100 items or fewer first.';return;}$('#bulk-input').value=JSON.stringify(list.map(i=>Object.fromEntries(['id','revision','name','plu','cat','code_type','organic','storage','locations','sale_unit','aliases'].map(k=>[k,i[k]]))),null,2);invalidate();};
   $('#apply-bulk-tags').onclick=()=>{try{const rows=parseImport($('#bulk-input').value);for(const row of rows)for(const select of $('#bulk-tag-fields').querySelectorAll('select'))if(select.value)row[select.name]=select.value==='__clear'?'':select.value;$('#bulk-input').value=JSON.stringify(rows,null,2);invalidate();}catch(e){$('#bulk-error').textContent=e.message;}};
@@ -102,7 +102,7 @@ export function mountEditor(root, { onChange = () => {}, onLogout = () => {} } =
     const heading=document.createElement('p');heading.textContent=`${p.rows.length} proposed changes. Nothing is saved yet. Review before confirming.`;$('#bulk-preview').append(heading);
     for(const row of p.rows){const section=document.createElement('article');section.className='audit-entry';const title=document.createElement('strong');title.textContent=`${row.action.toUpperCase()} · ${row.after.plu} · ${row.after.name}`;const details=document.createElement('pre');const changes={};for(const key of ['name','plu','cat','code_type','organic','storage','locations','sale_unit','aliases'])if(JSON.stringify(row.before?.[key])!==JSON.stringify(row.after[key]))changes[key]={before:row.before?.[key]??null,after:row.after[key]};details.textContent=JSON.stringify(changes,null,2);section.append(title,details);$('#bulk-preview').append(section);}$('#confirm-bulk').hidden=false;
    }catch(e){$('#bulk-error').textContent=e.details?e.details.map(x=>`Row${x.row}: ${x.error}`).join(' · '):e.message;}finally{$('#preview-bulk').disabled=false;}};
-  $('#confirm-bulk').onclick=async()=>{if(!previewId)return;$('#confirm-bulk').disabled=true;try{const r=await request(`${adminPath}/bulk/confirm`,{method:'POST',data:{previewId}});invalidate();$('#bulk-dialog').close();await refresh();onChange();status(`${r.count} changes saved. Each can be undone from Activity while unchanged.`);}catch(e){$('#bulk-error').textContent=e.message;invalidate();}finally{$('#confirm-bulk').disabled=false;}};
+  $('#confirm-bulk').onclick=async()=>{if(!previewId||bulkBusy)return;bulkBusy=true;$('#confirm-bulk').disabled=true;try{const r=await request(`${adminPath}/bulk/confirm`,{method:'POST',data:{previewId}});invalidate();$('#bulk-dialog').close();await refresh();onChange();status(`${r.count} changes saved. Each can be undone from Activity while unchanged.`);}catch(e){$('#bulk-error').textContent=e.message;invalidate();}finally{bulkBusy=false;$('#confirm-bulk').disabled=false;}};
   const ready = refresh().catch(e => status(e.message, true));
   return { ready, refresh };
 }

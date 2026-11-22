@@ -13,6 +13,10 @@ A small produce reference website and Android companion sharing one Express API 
 
 **The mobile-browser gate is deliberately best-effort.** User-Agent checks can be spoofed. Password/session or app-token authorization remains mandatory on all writes; an app install or a forged app header grants no privilege.
 
+## Android Back (2.3.2)
+
+System Back (button/gesture via AndroidX dispatcher) closes the active HTML dialog using its cancel/close lifecycle first, honoring guards during saves/photo uploads/bulk confirmation and releasing barcode screen-awake. Next it cancels pending editor navigation, hides Updates without reopening it on an outstanding check/download result, returns through the previous native tabs, then clears reader search/category/tag filters. At the unfiltered home root, it returns to Android by backgrounding the task, not killing the app or signing out. Real WebView history is used before that fallback if a separate document was opened. Camera/installer/settings/system keyboard retain their normal Android activity/IME Back handling. Physical gesture/keyboard behavior still needs device testing.
+
 ## Barcode scanning and longer codes (2.3)
 
 The name stays **PLU Hub**. Android's Add item form has Scan barcode, plus a Scan to add shortcut. Camera permission is requested only on that action. The bundled ZXing decoder works on-device without downloading a model, saving barcode images, uploading frames or using an account/API key. Cancel/denial/no camera retains manual entry. The scan fills only the code and its format; name/category/tags require review and explicit Save. Exact duplicates are refused by the shared API. Desktop administration accepts manual/pasted/keyboard-scanner input; native camera scanning is Android-only.
