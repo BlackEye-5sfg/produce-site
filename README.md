@@ -13,6 +13,12 @@ A small produce reference website and Android companion sharing one Express API 
 
 **The mobile-browser gate is deliberately best-effort.** User-Agent checks can be spoofed. Password/session or app-token authorization remains mandatory on all writes; an app install or a forged app header grants no privilege.
 
+## Private sales-floor list (2.4)
+
+Floor list is a free-text checklist, separate from the shared catalogue. Each line can be edited, checked or deleted. Enter / mobile next-line creates the next row at the caret; multiline paste creates separate rows. IME composition is not treated as Enter. Add item also opens a blank line. Android Back closes the list without erasing it, and normal navigation/refresh of catalogue data does not overwrite it.
+
+The list exists **only in this open page/app session's memory**. No API, database, file, localStorage/sessionStorage, sharing or synchronization is used. Reloading, restarting or the OS reclaiming the app clears it. Simply backgrounding the still-running app or closing/reopening the list retains it. It works offline without an admin login and does not populate the catalogue. Limits:200 rows/1000 characters per row; oversized edits/pastes are rejected rather than clipped. Content is rendered as literal text, not HTML. Physical Android IME behavior needs device testing.
+
 ## Android Back (2.3.2)
 
 System Back (button/gesture via AndroidX dispatcher) closes the active HTML dialog using its cancel/close lifecycle first, honoring guards during saves/photo uploads/bulk confirmation and releasing barcode screen-awake. Next it cancels pending editor navigation, hides Updates without reopening it on an outstanding check/download result, returns through the previous native tabs, then clears reader search/category/tag filters. At the unfiltered home root, it returns to Android by backgrounding the task, not killing the app or signing out. Real WebView history is used before that fallback if a separate document was opened. Camera/installer/settings/system keyboard retain their normal Android activity/IME Back handling. Physical gesture/keyboard behavior still needs device testing.
