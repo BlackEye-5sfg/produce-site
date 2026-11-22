@@ -13,6 +13,10 @@ A small produce reference website and Android companion sharing one Express API 
 
 **The mobile-browser gate is deliberately best-effort.** User-Agent checks can be spoofed. Password/session or app-token authorization remains mandatory on all writes; an app install or a forged app header grants no privilege.
 
+## GitHub releases
+
+Download published APKs and checksums from [Releases](https://github.com/JinxOnPurpose-Labs/plu-hub/releases). They mirror the existing first-party APK bytes, with source/build/signer provenance and a changelog; Android still uses its original updater host and normal installation approval. See [releasing procedure](docs/RELEASING.md) and [changelog](CHANGELOG.md). Never replace an existing version with a rebuild.
+
 ## Private sales-floor list (2.4)
 
 Floor list is a free-text checklist, separate from the shared catalogue. Each line can be edited, checked or deleted. The2.4.1 Hide checked toggle temporarily hides completed rows without deleting them, keeping their text/check state and full counts. Turn it off to review/uncheck them. The toggle itself is session-only and defaults off in a new session. Enter / mobile next-line creates the next row at the caret; multiline paste creates separate rows. IME composition is not treated as Enter. Add item also opens a blank line. Android Back closes the list without erasing it, and normal navigation/refresh of catalogue data does not overwrite it.
