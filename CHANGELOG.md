@@ -1,5 +1,11 @@
 # PLU Hub changelog
 
+## 2.4.2
+
+- Version-only release to test in-app update download, Android/Play Protect scan and user-confirmed installation.
+- Same package/signing identity, catalogue, credentials and permissions; no runtime feature changes.
+- After installation, Updates → Check now should report installed version2.4.2. Updating/restarting clears the RAM-only floor list.
+
 ## 2.4.1
 
 - Add a session-only **Hide checked items** toggle to the sales-floor checklist. Completed rows can be restored without losing their text/check state; totals still include them.
