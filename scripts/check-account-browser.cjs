@@ -7,16 +7,16 @@ const{chromium}=require(process.env.PLAYWRIGHT_MODULE);
  const store=createStore(':memory:');store.seedItems([{name:'Bananas',plu:'4011',cat:'fruit'}]);const app=createApp({store,user:'synthetic-user',password:'synthetic-password',sessionSecret:'synthetic-only',production:false}),server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH}),checks=[],errors=[];
  try{
-  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,userAgent:'Android Mobile synthetic'});let stored=null,generation=0,offline=false,puts=0,logins=0,loginWait=null,releaseLogin=null,seenLogin=null;
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,userAgent:'Android Mobile synthetic'});let stored=null,generation=0,offline=false,puts=0,logins=0,issuedTokens=[],loginWait=null,releaseLogin=null,seenLogin=null;
   await context.exposeFunction('__native',async(plugin,method,options)=>{
    if(plugin==='AppUpdater')return{installedVersion:'2.5.0',installedCode:20500,available:false};
    if(plugin==='SecureSession'){
     if(method==='load')return{...(stored||{}),generation};
     if(method==='clear'){stored=null;return{generation:++generation};}
-    if(method==='save'){if(options.generation!==generation)throw Error('Stale store fixture');stored={token:options.token,expiresAt:options.expiresAt};return{};}
+    if(method==='save'){if(options.generation!==generation)throw Error('Stale store fixture');issuedTokens.push(options.token);stored={token:options.token,expiresAt:options.expiresAt};return{};}
    }
    if(plugin==='ScreenAwake')return{};
-   assert.equal(plugin,'CapacitorHttp');const u=new URL(options.url);assert.equal(u.origin,'https://plus.xanderxx.xyz');if(offline)throw Error('Offline fixture');if(u.pathname.endsWith('/floor-list')&&options.method==='PUT')puts++;if(u.pathname==='/api/app/login'){logins++;if(loginWait){seenLogin();await loginWait;}}
+   assert.equal(plugin,'CapacitorHttp');assert.equal(options.disableRedirects,true);const u=new URL(options.url);assert.equal(u.origin,'https://plus.xanderxx.xyz');if(offline)throw Error('Offline fixture');if(u.pathname.endsWith('/floor-list')&&options.method==='PUT')puts++;if(u.pathname==='/api/app/login'){logins++;if(loginWait){seenLogin();await loginWait;}}
    const r=await fetch(base+u.pathname,{method:options.method,headers:options.headers,body:options.data===undefined?undefined:JSON.stringify(options.data)});return{status:r.status,data:await r.json()};
   });
   await context.addInitScript(()=>{window.androidBridge={};window.Capacitor={PluginHeaders:[{name:'CapacitorHttp',methods:[{name:'request',rtype:'promise'}]},{name:'SecureSession',methods:['load','save','clear'].map(name=>({name,rtype:'promise'}))},{name:'AppUpdater',methods:['info','check','download','settings','install'].map(name=>({name,rtype:'promise'}))}],nativePromise:(p,m,o)=>window.__native(p,m,o)};});
@@ -30,7 +30,7 @@ const{chromium}=require(process.env.PLAYWRIGHT_MODULE);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:path.join(out,'native-account-synthetic.png'),fullPage:false});
   offline=true;await page.locator('#floor-forget-login').click();await page.locator('#floor-save-status').filter({hasText:'Signed out'}).waitFor();assert.equal(stored,null);assert.equal((await fields.allTextContents()).includes('SYNTHETIC other client'),false);assert.equal(await fields.first().inputValue(),'');checks.push('offline sign-out clears stored secret and account display immediately');
   offline=false;const loginEntered=new Promise(resolve=>{seenLogin=resolve;});loginWait=new Promise(resolve=>{releaseLogin=resolve;});await page.locator('#floor-account-action').click();await page.locator('#native-login-form [name=username]').fill('synthetic-user');await page.locator('#native-login-form [name=password]').fill('synthetic-password');await page.locator('#native-login-form [type=submit]').click();await loginEntered;await page.evaluate(()=>window.pluHandleBack());releaseLogin();await page.waitForTimeout(200);assert.equal(stored,null);assert.equal(await page.locator('#native-login').evaluate(x=>x.open),false);assert.equal(await page.locator('#native-editor').isHidden(),true);checks.push('Back cancels pending login without resurrecting a late token or opening editor');
-  const disk=await page.evaluate(()=>JSON.stringify({local:{...localStorage},session:{...sessionStorage}}));assert.ok(!disk.includes('SYNTHETIC')&&!disk.includes('synthetic-password')&&!disk.includes('Bearer'));assert.deepEqual(errors,[]);checks.push('no private list/password/bearer in localStorage/sessionStorage; no page errors');
+  const disk=await page.evaluate(()=>JSON.stringify({local:{...localStorage},session:{...sessionStorage}}));assert.ok(issuedTokens.every(token=>!disk.includes(token)));assert.ok(!disk.includes('SYNTHETIC')&&!disk.includes('synthetic-password')&&!disk.includes('Bearer'));assert.deepEqual(errors,[]);checks.push('no private list/password/bearer in localStorage/sessionStorage; no page errors');
   await context.close();fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify({checks,simulatedCapacitorBridge:true,physicalDeviceTest:false,hardwareKeystoreTest:false},null,2),{mode:0o600});console.log(JSON.stringify({checks,physicalDeviceTest:false,hardwareKeystoreTest:false}));
  }finally{await browser.close();app.locals.closeStreams();server.closeAllConnections();await new Promise(r=>server.close(r));store.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

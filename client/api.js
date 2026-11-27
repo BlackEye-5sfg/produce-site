@@ -14,8 +14,8 @@ async function send(path,{method='GET',data}={},token){
  const headers={Accept:'application/json'};if(data!==undefined)headers['Content-Type']='application/json';
  if(native&&token)headers.Authorization=`Bearer ${token}`;if(!native&&csrf)headers['X-CSRF-Token']=csrf;
  let status,body;
- if(native){const r=await CapacitorHttp.request({url:BASE+path,method,headers,data,connectTimeout:10000,readTimeout:15000});status=r.status;try{body=typeof r.data==='string'?JSON.parse(r.data):r.data;}catch{body={};}}
- else{const r=await fetch(path,{method,headers,credentials:'same-origin',body:data===undefined?undefined:JSON.stringify(data),cache:'no-store'});status=r.status;body=await r.json().catch(()=>({}));}
+ if(native){const r=await CapacitorHttp.request({url:BASE+path,method,headers,data,connectTimeout:10000,readTimeout:15000,disableRedirects:true});status=r.status;try{body=typeof r.data==='string'?JSON.parse(r.data):r.data;}catch{body={};}}
+ else{const r=await fetch(path,{method,headers,credentials:'same-origin',body:data===undefined?undefined:JSON.stringify(data),cache:'no-store',redirect:'error'});status=r.status;body=await r.json().catch(()=>({}));}
  if(status<200||status>=300){const e=new Error(body.error||`Request failed (${status})`);e.status=status;e.details=body.errors;throw e;}
  if(body.csrf)csrf=body.csrf;return body;
 }
