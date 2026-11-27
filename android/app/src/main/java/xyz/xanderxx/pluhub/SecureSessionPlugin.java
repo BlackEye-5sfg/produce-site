@@ -13,10 +13,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
-import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
 
 /** Only an opaque session is persisted, never a password or private list. */
 @CapacitorPlugin(name="SecureSession")
@@ -48,8 +46,7 @@ public class SecureSessionPlugin extends Plugin {
             if(sealed==null&&iv==null){call.resolve(result);return;}
             if(sealed==null||iv==null||sealed.length()>2048||iv.length()>64)throw new IllegalStateException("Invalid stored session");
             byte[] nonce=Base64.decode(iv,Base64.NO_WRAP);if(nonce.length!=12)throw new IllegalStateException("Invalid nonce");
-            Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,key(false),new GCMParameterSpec(128,nonce));
-            JSONObject data=new JSONObject(new String(cipher.doFinal(Base64.decode(sealed,Base64.NO_WRAP)),StandardCharsets.UTF_8));
+            JSONObject data=new JSONObject(new String(SessionCipher.open(key(false),nonce,Base64.decode(sealed,Base64.NO_WRAP)),StandardCharsets.UTF_8));
             String token=data.getString("token");long expires=data.getLong("expiresAt"),now=System.currentTimeMillis();
             if(!SessionPolicy.valid(token,expires,now))throw new IllegalStateException("Expired or invalid session");
             result.put("token",token);result.put("expiresAt",expires);call.resolve(result);
@@ -60,9 +57,9 @@ public class SecureSessionPlugin extends Plugin {
             Long expected=call.getLong("generation"),expires=call.getLong("expiresAt");String token=call.getString("token");long now=System.currentTimeMillis();
             if(expected==null||expected!=generation||expires==null||!SessionPolicy.valid(token,expires,now))throw new IllegalArgumentException("Invalid or cancelled session");
             JSONObject data=new JSONObject();data.put("token",token);data.put("expiresAt",expires);
-            Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,key(true));
-            String sealed=Base64.encodeToString(cipher.doFinal(data.toString().getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
-            if(!prefs().edit().putString("iv",Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP)).putString("sealed",sealed).commit())throw new IllegalStateException("Write failed");
+            SessionCipher.Sealed envelope=SessionCipher.seal(key(true),data.toString().getBytes(StandardCharsets.UTF_8));
+            String sealed=Base64.encodeToString(envelope.bytes,Base64.NO_WRAP);
+            if(!prefs().edit().putString("iv",Base64.encodeToString(envelope.iv,Base64.NO_WRAP)).putString("sealed",sealed).commit())throw new IllegalStateException("Write failed");
             call.resolve();
         }catch(Exception error){call.reject("Secure session could not be saved");}
     }}
