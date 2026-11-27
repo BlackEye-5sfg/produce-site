@@ -33,4 +33,13 @@ Read back the public release page/assets and source tag. Record the URL. This pu
 
 ## Installation and privacy
 
-Android retains its existing first-party update checks and explicit installer confirmation. A GitHub release is another download location, not a new app identity or signer. Updating/restarting ends the RAM-only floor-list session; finish your current list first. Physical camera/keyboard/POS testing is distinct from CI/signature/hash verification and must not be claimed without device evidence.
+Android retains its existing first-party update checks and explicit installer confirmation. A GitHub release is another download location, not a new app identity or signer. Updating/restarting clears guest RAM drafts and any unacknowledged account edits. Confirm account changes say Saved before closing; saved account lists persist server-side. Android30-day sign-in uses the Keystore-backed store; legacy unbound sessions require one re-login. Physical camera/keyboard/POS testing is distinct from CI/signature/hash verification and must not be claimed without device evidence.
+
+
+## Account-list/session migration releases
+
+Before any backend change, create a consistent SQLite backup and protected copies of changed source/static files under a serialized consume-once operation. Never reset/reseed dirty production data/source. Deploy the additive `app_sessions.account_id/created_at` and separate `account_floor_lists` schema with the existing PLU-only restart. Keep DB/WAL/SHM and backups owner-readable only. Compare catalogue metadata/history/high-water sequence and unrelated process identities without reading/printing private list content. No floor-list rows belong in source, audit, public feeds, workbench reports, screenshots or release evidence; use synthetic fixtures for functional tests.
+
+The APK and server must agree on `/api/app/floor-list`, account binding and session TTL before publication. Test authenticated desktop guards/CSRF separately; do not weaken them for phone browsers. Confirm exact packaged secure-session bridge/backup exclusions/client assets, trusted APKv2/content/signer verification and successful original CI source. Upload immutable APK and prove hosted bytes **before** atomically replacing the update feed, then mirror those same bytes/provenance on GitHub. Do not replay historical consumed deployment scripts or change signer/package/updater to avoid Play Protect. No real owner list reads/writes are part of release smoke checks.
+
+Issue13 stays open if physical secure persistence/app restart acceptance is still outstanding. Release integrity, synthetic server/browser/JVM tests and hardware/device verification are separate evidence levels. Never claim this update clears Google's unresolved classification issue11, submit review/scanner uploads without approval or advise bypassing protection.
