@@ -3,7 +3,8 @@
   "appName": "PLU Hub",
   "webDir": "public",
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "loggingBehavior": "none"
   },
   "server": {
     "androidScheme": "https"
