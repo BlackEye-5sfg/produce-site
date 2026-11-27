@@ -5,6 +5,7 @@ const express = require('express');
 const session = require('express-session');
 const { createStore } = require('./db');
 const { validateItem } = require('../shared/catalog');
+const { validateRows,emptyRows } = require('../shared/floor-list');
 const { savePhoto } = require('./photos');
 const fs = require('node:fs');
 
@@ -12,6 +13,8 @@ const MOBILE = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Windows Phone|Opera Min
 function createApp(options = {}) {
   const store = options.store || createStore();
   const user = options.user ?? (process.env.AUTH_USER || 'xander');
+  const accountId = crypto.createHash('sha256').update('plu-account-v1\0'+user).digest('hex');
+  const now = options.now || Date.now, APP_TTL=30*24*60*60*1000;
   const password = options.password ?? process.env.AUTH_PASSWORD;
   if (!password) throw new Error('AUTH_PASSWORD must be configured');
   const secret = options.sessionSecret || process.env.SESSION_SECRET || crypto.randomBytes(48).toString('hex');
@@ -24,6 +27,7 @@ function createApp(options = {}) {
   });
   app.use(session({ name: 'pluhub.sid', secret, resave: false, rolling: true, saveUninitialized: false,
     cookie: { httpOnly: true, sameSite: 'lax', secure: secureCookie, maxAge: 3 * 24 * 60 * 60 * 1000 } }));
+  app.use(['/api/app','/api/floor-list'],(_req,res,next)=>{res.set({'Cache-Control':'no-store, private','Pragma':'no-cache'});next();});
   const hash = token => crypto.createHash('sha256').update(token).digest('hex');
   const equal = (a, b) => {
     const x = crypto.createHash('sha256').update(String(a || '')).digest();
@@ -36,7 +40,7 @@ function createApp(options = {}) {
     return res.status(403).type('html').send('<!doctype html><meta name="viewport" content="width=device-width"><title>Desktop admin only</title><main style="font:18px system-ui;max-width:38rem;margin:15vh auto;padding:2rem"><h1>Web admin is desktop-only</h1><p>You can still browse the catalog on your phone, or edit using the PLU Hub Android app.</p><a href="/">Back to the catalog</a></main>');
   }
   function webAuth(req, res, next) {
-    if (req.session?.user === user) { req.actor = 'web-admin'; return next(); }
+    if (req.session?.user === user) { req.actor = 'web-admin'; req.accountId=accountId; return next(); }
     if (!req.path.startsWith('/api/')) return res.redirect('/login.html?next=/edit');
     res.status(401).json({ error: 'Sign in to edit the catalog.' });
   }
@@ -60,28 +64,50 @@ function createApp(options = {}) {
   function appAuth(req, res, next) {
     const token = (req.get('authorization') || '').match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
     if (!token) return res.status(401).json({ error: 'Sign in to edit the catalog.' });
-    const row = store.db.prepare('SELECT expires_at FROM app_sessions WHERE token_hash=?').get(hash(token));
-    if (!row || row.expires_at < Date.now()) return res.status(401).json({ error: 'Your session expired. Sign in again.' });
-    req.actor = 'android-app'; req.tokenHash = hash(token); next();
+    const row = store.db.prepare('SELECT expires_at,created_at,account_id FROM app_sessions WHERE token_hash=?').get(hash(token));
+    if (!row || row.account_id!==accountId || !Number.isSafeInteger(row.created_at) || row.created_at>now() || !Number.isSafeInteger(row.expires_at) || row.expires_at<=row.created_at || row.expires_at<=now() || row.expires_at>row.created_at+APP_TTL) return res.status(401).json({ error: 'Your session expired. Sign in again.' });
+    req.actor = 'android-app'; req.accountId=row.account_id; req.appExpiresAt=row.expires_at; req.tokenHash = hash(token); next();
   }
   app.get('/api/health', (_req, res) => res.json({ ok: true, items: store.countItems() }));
   app.get('/api/me', (req, res) => { res.set('Cache-Control', 'no-store'); res.json({ authenticated: req.session?.user === user,
-    user: req.session?.user === user ? user : null, csrf: req.session?.user === user ? req.session.csrf : null }); });
+    user: req.session?.user === user ? user : null, accountId: req.session?.user === user ? accountId : null, csrf: req.session?.user === user ? req.session.csrf : null }); });
   app.post('/api/login', desktop, sameOrigin, throttle, (req, res, next) => {
     if (!validLogin(req)) return res.status(401).json({ error: 'Incorrect username or password.' });
     req.session.regenerate(err => { if (err) return next(err); req.session.user = user; req.session.csrf = crypto.randomBytes(24).toString('hex');
-      res.set('Cache-Control', 'no-store').json({ ok: true, user, csrf: req.session.csrf }); });
+      res.set('Cache-Control', 'no-store').json({ ok: true, user, accountId, csrf: req.session.csrf }); });
   });
   app.post('/api/logout', sameOrigin, (req, res) => req.session.destroy(() => { res.clearCookie('pluhub.sid'); res.json({ ok: true }); }));
   app.post('/api/app/login', throttle, (req, res) => {
     if (!validLogin(req)) return res.status(401).json({ error: 'Incorrect username or password.' });
-    store.db.prepare('DELETE FROM app_sessions WHERE expires_at<?').run(Date.now());
-    const token = crypto.randomBytes(32).toString('base64url'); const expiresAt = Date.now() + 3 * 24 * 60 * 60 * 1000;
-    store.db.prepare('INSERT INTO app_sessions VALUES(?,?)').run(hash(token), expiresAt);
-    res.set('Cache-Control', 'no-store').json({ ok: true, token, expiresAt, user });
+    store.db.prepare('DELETE FROM app_sessions WHERE expires_at<?').run(now());
+    const token = crypto.randomBytes(32).toString('base64url'); const createdAt=now(), expiresAt=createdAt+APP_TTL;
+    store.db.prepare('INSERT INTO app_sessions(token_hash,expires_at,account_id,created_at) VALUES(?,?,?,?)').run(hash(token),expiresAt,accountId,createdAt);
+    res.set('Cache-Control', 'no-store').json({ ok: true, token, expiresAt, user, accountId });
   });
-  app.get('/api/app/me', appAuth, (_req, res) => res.set('Cache-Control', 'no-store').json({ authenticated: true, user }));
+  app.get('/api/app/me', appAuth, (req, res) => res.set('Cache-Control', 'no-store').json({ authenticated: true, user, accountId:req.accountId, expiresAt:req.appExpiresAt }));
   app.post('/api/app/logout', appAuth, (req, res) => { store.db.prepare('DELETE FROM app_sessions WHERE token_hash=?').run(req.tokenHash); res.json({ ok: true }); });
+  function privateFloor(prefix,readGuards,writeGuards){
+    const noStore=(_req,res,next)=>{res.set({'Cache-Control':'no-store, private','Pragma':'no-cache'});next();};
+    app.get(prefix,noStore,...readGuards,(req,res)=>{
+      const saved=store.db.prepare('SELECT revision,rows_json FROM account_floor_lists WHERE account_id=?').get(req.accountId);
+      res.json({revision:saved?.revision||0,rows:saved?JSON.parse(saved.rows_json):emptyRows()});
+    });
+    app.put(prefix,noStore,...writeGuards,(req,res,next)=>{
+      let rows;try{if(!req.body||Object.keys(req.body).sort().join(',')!=='revision,rows'||!Number.isSafeInteger(req.body.revision)||req.body.revision<0||req.body.revision>=2147483647)throw Error('Invalid revision.');rows=validateRows(req.body.rows);}catch{return res.status(400).json({error:'Invalid or oversized floor list.'});}
+      try{const result=store.db.transaction(()=>{
+        const old=store.db.prepare('SELECT revision FROM account_floor_lists WHERE account_id=?').get(req.accountId),revision=old?.revision||0;
+        if(revision!==req.body.revision)return{conflict:true,revision};
+        const nextRevision=revision+1;
+        store.db.prepare('INSERT INTO account_floor_lists(account_id,revision,rows_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET revision=excluded.revision,rows_json=excluded.rows_json,updated_at=excluded.updated_at').run(req.accountId,nextRevision,JSON.stringify(rows),now());
+        return{revision:nextRevision};
+      }).immediate();
+      if(result.conflict)return res.status(409).json({error:'Your saved floor list changed on another device. Unsaved edits were kept. Reload explicitly to use the server copy.',revision:result.revision});
+      res.json({ok:true,revision:result.revision});
+      }catch(error){next(error);}
+    });
+  }
+  privateFloor('/api/app/floor-list',[appAuth],[appAuth]);
+  privateFloor('/api/floor-list',[desktop,webAuth,sameOrigin],[desktop,webAuth,sameOrigin,csrf]);
   app.get('/api/items', (_req, res) => {
     res.set({ 'Cache-Control': 'no-cache', ETag: `W/"catalog-${store.revision()}"`, 'X-Catalog-Revision': String(store.revision()) }); res.json(store.listItems());
   });

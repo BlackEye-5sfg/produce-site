@@ -5,7 +5,7 @@ const extra={organic:'',storage:'',locations:[],sale_unit:'',aliases:[],photo:''
 const business=['name','es','plu','cat','organic','storage','locations','sale_unit','aliases','photo','code_type'];
 const decode=row=>row?{...row,locations:JSON.parse(row.locations||'[]'),aliases:JSON.parse(row.aliases||'[]')}:undefined;
 function createStore(filename=process.env.PLU_DB_PATH||path.join(__dirname,'..','data','plu.db')){
- if(filename!==':memory:')fs.mkdirSync(path.dirname(filename),{recursive:true});const db=new Database(filename);db.pragma('journal_mode=WAL');db.pragma('foreign_keys=ON');db.pragma('busy_timeout=5000');let migrated=false;
+ if(filename!==':memory:')fs.mkdirSync(path.dirname(filename),{recursive:true});const db=new Database(filename);if(filename!==':memory:')fs.chmodSync(filename,0o600);db.pragma('journal_mode=WAL');db.pragma('foreign_keys=ON');db.pragma('busy_timeout=5000');if(filename!==':memory:')for(const suffix of ['-wal','-shm'])if(fs.existsSync(filename+suffix))fs.chmodSync(filename+suffix,0o600);let migrated=false;
  db.transaction(()=>{
   const old=db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='items'").get();
   if(!old)db.exec(schema('items'));
@@ -25,6 +25,11 @@ function createStore(filename=process.env.PLU_DB_PATH||path.join(__dirname,'..',
    CREATE TABLE IF NOT EXISTS catalog_meta(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL);INSERT OR IGNORE INTO catalog_meta VALUES(1,1);
    CREATE TABLE IF NOT EXISTS item_audit(id INTEGER PRIMARY KEY,action TEXT NOT NULL,item_id INTEGER NOT NULL,actor TEXT NOT NULL,before_json TEXT,after_json TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')),undone_by INTEGER);
    CREATE TABLE IF NOT EXISTS app_sessions(token_hash TEXT PRIMARY KEY,expires_at INTEGER NOT NULL);`);
+  // Additive private schema: do not rewrite items/audit or bump catalogue revision.
+  const sessionColumns=db.prepare('PRAGMA table_info(app_sessions)').all().map(x=>x.name);
+  if(!sessionColumns.includes('account_id'))db.exec('ALTER TABLE app_sessions ADD COLUMN account_id TEXT');
+  if(!sessionColumns.includes('created_at'))db.exec('ALTER TABLE app_sessions ADD COLUMN created_at INTEGER');
+  db.exec("CREATE TABLE IF NOT EXISTS account_floor_lists(account_id TEXT PRIMARY KEY,revision INTEGER NOT NULL,rows_json TEXT NOT NULL,updated_at INTEGER NOT NULL)");
   if(!db.prepare('PRAGMA table_info(item_audit)').all().some(x=>x.name==='undone_by'))db.exec('ALTER TABLE item_audit ADD COLUMN undone_by INTEGER');
   if(migrated)db.exec('UPDATE catalog_meta SET revision=revision+1 WHERE id=1');
  }).immediate();

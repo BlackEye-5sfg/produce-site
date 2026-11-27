@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode';
 import { setupAppUpdates } from './app-updates';
 import '../public/js/search.js';
-import { native, mobileBrowser, request, me, login, mediaURL } from './api';
+import { native, mobileBrowser, request, me, login, logout, cancelLogin, onAccountChange, floorPath, mediaURL } from './api';
 import { mountEditor } from './editor';
 import {mountFloorList} from './floor-list';
 import {createBackHandler,createViewHistory} from './navigation';
@@ -23,7 +23,12 @@ if (page === 'login') {
 } else if (page === 'admin') {
   me().then(x => { if (!x.authenticated) location.href = '/login.html'; else mountEditor($('#desktop-editor')); }).catch(() => { location.href = '/login.html'; });
 } else {
-  mountFloorList(document);
+  let loginDestination='editor';
+  mountFloorList(document,{api:{get:()=>request(floorPath),put:data=>request(floorPath,{method:'PUT',data}),confirmDiscard:async()=>confirm('Discard unsaved account edits and reload the saved copy?')},
+    checkAccount:me,subscribe:onAccountChange,forget:native?logout:null,
+    chooseGuest:async()=>confirm('Upload this existing guest draft privately to your account? Cancel does NOT upload it.')?'upload':confirm('Use the saved account list instead? Your guest draft stays in RAM for sign-out.')?'saved':'guest',
+    accountAction:async()=>{try{const state=await me();if(state.authenticated){await logout();return;}if(!native){if(mobileBrowser){alert('Use the Android app for signed-in phone features.');return;}location.href='/login.html';return;}loginDestination='floor';$('#native-login-error').textContent='';$('#native-login').showModal();}catch(error){$('#floor-save-status').textContent='Could not check sign-in. Reconnect and try again; guest draft remains RAM-only.';}}
+  });
   let items = [], category = 'all', favoritesOnly = false, lastSync = null, offline = false, recent = [], currentDetail = null;
   try { recent = JSON.parse(localStorage.getItem('plu:recent:v1') || '[]'); if(!Array.isArray(recent))recent=[]; } catch {}
   let favorites;
@@ -109,14 +114,14 @@ if (page === 'login') {
     const requestId=++editorRequest;openingEditor=true;
     let user; try { user = await me(); } catch { user = { authenticated: false }; }
     if(requestId!==editorRequest)return;openingEditor=false;
-    if (!user.authenticated) { $('#native-login-error').textContent = ''; $('#native-login').showModal(); return; }
+    if (!user.authenticated) { loginDestination='editor';$('#native-login-error').textContent = ''; $('#native-login').showModal(); return; }
     viewHistory.visit('editor');$('#reader').hidden = true; editorRoot.hidden = false;
     if (!editor) editor = mountEditor(editorRoot, { onChange: refresh, onLogout: () => { editor = null; editorRoot.replaceChildren(); viewHistory.reset();browse(false,false); } });
     else editor.refresh();
   }
   $('#app-editor-button').onclick = openEditor; $('#nav-edit').onclick = openEditor;
-  $('#close-native-login').onclick = () => {loginRequest++;$('#native-login').close();};
-  $('#native-login').addEventListener('cancel',()=>{loginRequest++;});
+  $('#close-native-login').onclick = () => {loginRequest++;cancelLogin().catch(()=>{});$('#native-login').close();};
+  $('#native-login').addEventListener('cancel',()=>{loginRequest++;cancelLogin().catch(()=>{});});
   $('#native-login').addEventListener('close',()=>{loginRequest++;$('#native-login-form').elements.password.value='';});
   if(native)window.pluHandleBack=createBackHandler({document,
     cancelPending:()=>{if(!openingEditor)return false;editorRequest++;openingEditor=false;return true;},
@@ -126,7 +131,7 @@ if (page === 'login') {
   });
   $('#native-login-form').onsubmit = async e => {
     e.preventDefault(); const attempt=++loginRequest;const f = e.target; const submit = f.querySelector('[type=submit]'); submit.disabled = true;
-    try { await login(f.elements.username.value.trim(), f.elements.password.value); f.elements.password.value = ''; if(attempt!==loginRequest)return;$('#native-login').close(); await openEditor(); }
+    try { await login(f.elements.username.value.trim(), f.elements.password.value); f.elements.password.value = ''; if(attempt!==loginRequest)return;$('#native-login').close(); if(loginDestination==='editor')await openEditor(); }
     catch (err) { showError($('#native-login-error'), err.message); } finally { submit.disabled = false; }
   };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); else { $('#keep-awake').checked=false;screenAwake(false).catch(()=>{});$('#awake-status').textContent=''; } });

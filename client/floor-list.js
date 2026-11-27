@@ -1,4 +1,6 @@
-// Deliberately memory-only. Never connect this list to API, storage, catalogue or telemetry.
+// Guest drafts stay RAM-only. Account sync is separate from catalogue/storage.
+const{validateRows}=require('../shared/floor-list');
+const{createFloorSync}=require('./floor-sync');
 const MAX_ROWS=200,MAX_TEXT=1000;
 function createFloorList(){
  let nextId=1,rows=[{id:nextId++,text:'',checked:false}];
@@ -13,6 +15,7 @@ function createFloorList(){
  }
  return{
   get rows(){return rows.map(x=>({...x}));},
+  replace(value){const validated=validateRows(value);rows=validated;nextId=Math.max(...rows.map(x=>x.id))+1;},
   edit,
   breakLine(id,start,end=start){const row=get(id);return edit(id,row.text.slice(0,start)+'\n'+row.text.slice(end),start+1);},
   check(id,value){get(id).checked=Boolean(value);},
@@ -20,9 +23,11 @@ function createFloorList(){
   remove(id){const index=rows.indexOf(get(id));rows.splice(index,1);if(!rows.length)rows.push({id:nextId++,text:'',checked:false});return rows[Math.min(index,rows.length-1)].id;}
  };
 }
-function mountFloorList(document){
+function mountFloorList(document,options={}){
  const $=s=>document.querySelector(s),dialog=$('#floor-list-dialog'),root=$('#floor-list-rows'),list=createFloorList();
  if(!dialog||!root)return; // Older cached website HTML must still load its reader safely.
+ let syncing=false,seenView=0;
+ const sync=options.api?createFloorSync({model:list,api:options.api,chooseGuest:options.chooseGuest,changed:state=>{const wasSyncing=syncing;syncing=state.mode==='loading';$('#floor-save-status').textContent=state.status;$('#floor-account-action').textContent=state.account?'Sign out':'Sign in';$('#floor-use-account').hidden=state.mode!=='guest-hold';$('#floor-reload').hidden=state.mode!=='account';$('#floor-retry').hidden=state.mode!=='account';if(wasSyncing!==syncing||state.viewVersion!==seenView){seenView=state.viewVersion;render();}}}):null;
  const hide=$('#floor-hide-checked');if(hide)hide.checked=false;
  function visibility(){for(const row of list.rows){const line=root.querySelector(`[data-row="${row.id}"]`);if(line){line.hidden=Boolean(hide?.checked&&row.checked);if(!line.hidden)height(line.querySelector('textarea'));}}const empty=$('#floor-list-no-visible');if(empty)empty.hidden=!list.rows.every(x=>hide?.checked&&x.checked);}
  if(hide)hide.onchange=visibility;
@@ -30,19 +35,21 @@ function mountFloorList(document){
  function focus(id,caret){let input=root.querySelector(`[data-row="${id}"] textarea`);if(input?.closest('.floor-list-row').hidden)input=root.querySelector('.floor-list-row:not([hidden]) textarea');if(!input){$('#add-floor-item').focus();return;}input.focus();input.setSelectionRange(caret??input.value.length,caret??input.value.length);input.scrollIntoView({block:'nearest'});}
  function height(input){input.style.height='auto';input.style.height=Math.max(44,input.scrollHeight)+'px';}
  function error(e){$('#floor-list-error').textContent=e.message;}
- function apply(row,input){if(!input.isConnected)return;try{const result=list.edit(row.id,input.value,input.selectionStart);$('#floor-list-error').textContent='';if(result.split){render();focus(result.id,result.caret);}else{height(input);status();}}catch(e){input.value=list.rows.find(x=>x.id===row.id).text;height(input);error(e);}}
- function render(){root.replaceChildren();for(const row of list.rows){
+ function apply(row,input){if(!input.isConnected)return;try{const result=list.edit(row.id,input.value,input.selectionStart);$('#floor-list-error').textContent='';if(result.split){render();focus(result.id,result.caret);}else{height(input);status();}sync?.edit();}catch(e){input.value=list.rows.find(x=>x.id===row.id).text;height(input);error(e);}}
+ function render(){root.replaceChildren();$('#add-floor-item').disabled=syncing;for(const row of list.rows){
   const line=document.createElement('div');line.className='floor-list-row';line.dataset.row=row.id;line.classList.toggle('checked',row.checked);
-  const check=document.createElement('input');check.type='checkbox';check.checked=row.checked;check.setAttribute('aria-label','Mark item checked');check.onchange=()=>{list.check(row.id,check.checked);line.classList.toggle('checked',check.checked);status();visibility();if(line.hidden){const next=root.querySelector('.floor-list-row:not([hidden]) input[type=checkbox]');(next||$('#add-floor-item')).focus();}};
-  const input=document.createElement('textarea');input.rows=1;input.value=row.text;input.placeholder='What does the floor need?';input.setAttribute('aria-label','Sales-floor item');input.setAttribute('enterkeyhint','enter');input.autocomplete='off';input.dataset.private='session-only';
-  input.addEventListener('keydown',e=>{if(!input.isConnected)return;if(e.key!=='Enter'||e.isComposing||e.keyCode===229)return;e.preventDefault();try{const result=list.breakLine(row.id,input.selectionStart,input.selectionEnd);$('#floor-list-error').textContent='';render();focus(result.id,result.caret);}catch(err){error(err);}});
-  input.addEventListener('beforeinput',e=>{if(!input.isConnected)return;if(!['insertLineBreak','insertParagraph'].includes(e.inputType)||e.isComposing||!e.cancelable)return;e.preventDefault();try{const result=list.breakLine(row.id,input.selectionStart,input.selectionEnd);$('#floor-list-error').textContent='';render();focus(result.id,result.caret);}catch(err){error(err);}});
+  const check=document.createElement('input');check.type='checkbox';check.checked=row.checked;check.setAttribute('aria-label','Mark item checked');check.onchange=()=>{list.check(row.id,check.checked);line.classList.toggle('checked',check.checked);status();visibility();sync?.edit();if(line.hidden){const next=root.querySelector('.floor-list-row:not([hidden]) input[type=checkbox]');(next||$('#add-floor-item')).focus();}};
+  const input=document.createElement('textarea');input.rows=1;input.value=row.text;input.placeholder='What does the floor need?';input.setAttribute('aria-label','Sales-floor item');input.setAttribute('enterkeyhint','enter');input.autocomplete='off';input.dataset.private='floor-list';input.disabled=syncing;check.disabled=syncing;
+  input.addEventListener('keydown',e=>{if(!input.isConnected)return;if(e.key!=='Enter'||e.isComposing||e.keyCode===229)return;e.preventDefault();try{const result=list.breakLine(row.id,input.selectionStart,input.selectionEnd);$('#floor-list-error').textContent='';render();focus(result.id,result.caret);sync?.edit();}catch(err){error(err);}});
+  input.addEventListener('beforeinput',e=>{if(!input.isConnected)return;if(!['insertLineBreak','insertParagraph'].includes(e.inputType)||e.isComposing||!e.cancelable)return;e.preventDefault();try{const result=list.breakLine(row.id,input.selectionStart,input.selectionEnd);$('#floor-list-error').textContent='';render();focus(result.id,result.caret);sync?.edit();}catch(err){error(err);}});
   input.addEventListener('input',e=>{if(!e.isComposing)apply(row,input);});input.addEventListener('compositionend',()=>apply(row,input));
-  const remove=document.createElement('button');remove.type='button';remove.className='icon-btn';remove.textContent='×';remove.setAttribute('aria-label','Delete item');remove.onclick=()=>{const id=list.remove(row.id);$('#floor-list-error').textContent='';render();focus(id);};
+  const remove=document.createElement('button');remove.type='button';remove.className='icon-btn';remove.textContent='×';remove.setAttribute('aria-label','Delete item');remove.disabled=syncing;remove.onclick=()=>{const id=list.remove(row.id);$('#floor-list-error').textContent='';render();focus(id);sync?.edit();};
   line.append(check,input,remove);root.append(line);height(input);
  }status();visibility();}
  function open(){if(!dialog.open)dialog.showModal();for(const input of root.querySelectorAll('textarea'))height(input);focus(list.rows.at(-1).id);}
- $('#open-floor-list').onclick=open;$('#nav-floor-list').onclick=open;$('#close-floor-list').onclick=()=>dialog.close();$('#add-floor-item').onclick=()=>{try{const id=list.add();$('#floor-list-error').textContent='';render();focus(id);}catch(e){error(e);}};
+ $('#open-floor-list').onclick=open;$('#nav-floor-list').onclick=open;$('#close-floor-list').onclick=()=>dialog.close();$('#add-floor-item').onclick=()=>{try{const id=list.add();$('#floor-list-error').textContent='';render();focus(id);sync?.edit();}catch(e){error(e);}};
+ if(sync){$('#floor-forget-login').hidden=!options.forget;$('#floor-forget-login').onclick=()=>options.forget?.().catch(()=>{$('#floor-save-status').textContent='Sign-out could not erase secure storage. Try again; account view was cleared.';});$('#floor-retry').onclick=()=>sync.save();$('#floor-reload').onclick=()=>sync.reload();$('#floor-use-account').onclick=()=>sync.useAccount();$('#floor-account-action').onclick=()=>options.accountAction();options.subscribe?.(state=>{sync.auth(state).catch(()=>{});});options.checkAccount?.().then(state=>sync.auth(state)).catch(()=>{$('#floor-save-status').textContent='Sign-in could not be checked. Guest remains RAM-only; reconnect and try sign-in.';});}
  render();
+ return{sync,list};
 }
 module.exports={createFloorList,mountFloorList};
