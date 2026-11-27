@@ -27,7 +27,7 @@ if (page === 'login') {
   mountFloorList(document,{api:{get:()=>request(floorPath),put:data=>request(floorPath,{method:'PUT',data}),confirmDiscard:async()=>confirm('Discard unsaved account edits and reload the saved copy?')},
     checkAccount:me,subscribe:onAccountChange,forget:native?logout:null,
     chooseGuest:async()=>confirm('Upload this existing guest draft privately to your account? Cancel does NOT upload it.')?'upload':confirm('Use the saved account list instead? Your guest draft stays in RAM for sign-out.')?'saved':'guest',
-    accountAction:async()=>{try{const state=await me();if(state.authenticated){await logout();return;}if(!native){if(mobileBrowser){alert('Use the Android app for signed-in phone features.');return;}location.href='/login.html';return;}loginDestination='floor';$('#native-login-error').textContent='';$('#native-login').showModal();}catch(error){$('#floor-save-status').textContent='Could not check sign-in. Reconnect and try again; guest draft remains RAM-only.';}}
+    accountAction:async()=>{try{const state=await me();if(state.authenticated){await logout();return;}if(!native){if(mobileBrowser){alert('Use the Android app for signed-in phone features.');return;}location.href='/login.html';return;}loginDestination='floor';$('#native-login-error').textContent='';$('#native-login').showModal();}catch(error){$('#floor-save-status').textContent='Could not check sign-in. Existing edits stay in this open view; reconnect or use Forget app sign-in.';}}
   });
   let items = [], category = 'all', favoritesOnly = false, lastSync = null, offline = false, recent = [], currentDetail = null;
   try { recent = JSON.parse(localStorage.getItem('plu:recent:v1') || '[]'); if(!Array.isArray(recent))recent=[]; } catch {}
